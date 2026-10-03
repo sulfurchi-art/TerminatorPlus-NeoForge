@@ -1,0 +1,104 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.148'
+    id 'idea'
+}
+
+tasks.named('wrapper', Wrapper).configure {
+    distributionType = Wrapper.DistributionType.BIN
+}
+
+version = mod_version
+group = mod_group_id
+
+base {
+    archivesName = "TerminatorPlus-NeoForge-${minecraft_version}"
+}
+
+// Mojang ships Java 21 to end users in 1.21.1, so mods should target Java 21.
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+neoForge {
+    version = project.neo_version
+
+    parchment {
+        mappingsVersion = project.parchment_mappings_version
+        minecraftVersion = project.parchment_minecraft_version
+    }
+
+    // Picked up automatically from src/main/resources/META-INF/accesstransformer.cfg
+    validateAccessTransformers = true
+
+    runs {
+        client {
+            client()
+        }
+
+        server {
+            server()
+            programArgument '--nogui'
+        }
+
+        // Dedicated server that spawns bots, runs the commands and shuts itself down again.
+        // Only used to smoke-test the port: ./gradlew runSelfTest
+        selfTest {
+            server()
+            programArgument '--nogui'
+            gameDirectory = project.file('run-selftest')
+            systemProperty 'terminatorplus.selftest', 'true'
+            systemProperty 'terminatorplus.fetchSkins', 'false'
+        }
+
+        configureEach {
+            logLevel = org.slf4j.event.Level.INFO
+        }
+    }
+
+    mods {
+        "${mod_id}" {
+            sourceSet(sourceSets.main)
+        }
+    }
+}
+
+// Expands the ${} properties in src/main/templates (neoforge.mods.toml).
+var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
+    var replaceProperties = [
+            minecraft_version      : minecraft_version,
+            minecraft_version_range: minecraft_version_range,
+            neo_version            : neo_version,
+            neo_version_range      : neo_version_range,
+            loader_version_range   : loader_version_range,
+            mod_id                 : mod_id,
+            mod_name               : mod_name,
+            mod_license            : mod_license,
+            mod_version            : mod_version,
+            mod_authors            : mod_authors,
+    ]
+    inputs.properties replaceProperties
+    expand replaceProperties
+    from "src/main/templates"
+    into "build/generated/sources/modMetadata"
+}
+sourceSets.main.resources.srcDir generateModMetadata
+neoForge.ideSyncTask generateModMetadata
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    // Keeps real parameter names around; the reflective command framework prints them in usage messages.
+    options.compilerArgs << '-parameters'
+}
+
+def licenseFileName = "LICENSE_${mod_id}".toString()
+tasks.named('jar', Jar).configure {
+    from('LICENSE') {
+        rename { licenseFileName }
+    }
+}
+
+idea {
+    module {
+        downloadSources = true
+        downloadJavadoc = true
+    }
+}

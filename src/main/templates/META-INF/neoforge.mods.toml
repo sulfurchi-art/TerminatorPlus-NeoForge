@@ -1,0 +1,40 @@
+modLoader="javafml"
+loaderVersion="${loader_version_range}"
+license="${mod_license}"
+issueTrackerURL="https://github.com/HorseNuggets/TerminatorPlus/issues"
+
+[[mods]]
+modId="${mod_id}"
+version="${mod_version}"
+displayName="${mod_name}"
+displayURL="https://github.com/HorseNuggets/TerminatorPlus"
+authors="${mod_authors}"
+credits="Port of the TerminatorPlus Paper plugin by HorseNuggets and contributors to NeoForge."
+description='''
+Server-side player bots that try to be as human-like as possible: they chase targets, bridge, tower,
+mine through obstacles, clutch with water buckets and can be trained with a small neural network.
+Port of the TerminatorPlus Paper plugin (https://github.com/HorseNuggets/TerminatorPlus).
+'''
+
+# The mod only lives on the logical server. Clients without it can still join a server that has it.
+displayTest="IGNORE_SERVER_VERSION"
+
+[[mixins]]
+config="${mod_id}.mixins.json"
+
+[[accessTransformers]]
+file="META-INF/accesstransformer.cfg"
+
+[[dependencies.${mod_id}]]
+    modId="neoforge"
+    type="required"
+    versionRange="${neo_version_range}"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="minecraft"
+    type="required"
+    versionRange="${minecraft_version_range}"
+    ordering="NONE"
+    side="BOTH"
