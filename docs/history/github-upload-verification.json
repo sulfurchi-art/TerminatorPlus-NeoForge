@@ -1,0 +1,490 @@
+{
+  "date": "2026-10-07",
+  "repository": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge",
+  "tags_verified": 9,
+  "releases": [
+    {
+      "tag": "archive-4.6-4.14",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/tag/archive-4.6-4.14",
+      "assets": 14
+    },
+    {
+      "tag": "v4.15.0-BETA",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/tag/v4.15.0-BETA",
+      "assets": 4
+    },
+    {
+      "tag": "v4.16.0-BETA",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/tag/v4.16.0-BETA",
+      "assets": 4
+    },
+    {
+      "tag": "v4.17.0-BETA",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/tag/v4.17.0-BETA",
+      "assets": 4
+    },
+    {
+      "tag": "v4.18.0-BETA",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/tag/v4.18.0-BETA",
+      "assets": 4
+    },
+    {
+      "tag": "v4.19.0-BETA",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/tag/v4.19.0-BETA",
+      "assets": 4
+    },
+    {
+      "tag": "v4.20.0-BETA",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/tag/v4.20.0-BETA",
+      "assets": 3
+    },
+    {
+      "tag": "v4.21.0-BETA",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/tag/v4.21.0-BETA",
+      "assets": 3
+    },
+    {
+      "tag": "v4.22.0-BETA",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/tag/v4.22.0-BETA",
+      "assets": 8
+    }
+  ],
+  "assets_verified": [
+    {
+      "tag": "archive-4.6-4.14",
+      "name": "TerminatorPlus-NeoForge-1.21.1-4.10.0-BETA.jar",
+      "asset_name": "TerminatorPlus-NeoForge-1.21.1-4.10.0-BETA.jar",
+      "bytes": 507845,
+      "sha256": "D1E6DE97420B1AF8376E6E68C9D32EDB83C6783C13CEFD2311A5A88CDB414B98",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/archive-4.6-4.14/TerminatorPlus-NeoForge-1.21.1-4.10.0-BETA.jar"
+    },
+    {
+      "tag": "archive-4.6-4.14",
+      "name": "TerminatorPlus-NeoForge-1.21.1-4.11.0-BETA.jar",
+      "asset_name": "TerminatorPlus-NeoForge-1.21.1-4.11.0-BETA.jar",
+      "bytes": 514091,
+      "sha256": "6537E2A362F355B5C2978A399F4435E5F29FFA06BAC99239B11F16142B92E756",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/archive-4.6-4.14/TerminatorPlus-NeoForge-1.21.1-4.11.0-BETA.jar"
+    },
+    {
+      "tag": "archive-4.6-4.14",
+      "name": "TerminatorPlus-NeoForge-1.21.1-4.12.0-BETA.jar",
+      "asset_name": "TerminatorPlus-NeoForge-1.21.1-4.12.0-BETA.jar",
+      "bytes": 552801,
+      "sha256": "FD50B7F6B60C3AE24711A05F5178148A5FA2C9B18B24089ECE172665A72E7AB4",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/archive-4.6-4.14/TerminatorPlus-NeoForge-1.21.1-4.12.0-BETA.jar"
+    },
+    {
+      "tag": "archive-4.6-4.14",
+      "name": "TerminatorPlus-NeoForge-1.21.1-4.13.0-BETA.jar",
+      "asset_name": "TerminatorPlus-NeoForge-1.21.1-4.13.0-BETA.jar",
+      "bytes": 614170,
+      "sha256": "A7BDF5EAEDBB59B0383217AAA2F5BBE19F2F6F07103F8641F8A191A0109DCF34",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/archive-4.6-4.14/TerminatorPlus-NeoForge-1.21.1-4.13.0-BETA.jar"
+    },
+    {
+      "tag": "archive-4.6-4.14",
+      "name": "TerminatorPlus-NeoForge-1.21.1-4.14.0-BETA.jar",
+      "asset_name": "TerminatorPlus-NeoForge-1.21.1-4.14.0-BETA.jar",
+      "bytes": 641637,
+      "sha256": "2E942044B824EB8CBA3F8A134A60A0AFF998A05432DE1687B2DB8CB1ADA849AB",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/archive-4.6-4.14/TerminatorPlus-NeoForge-1.21.1-4.14.0-BETA.jar"
+    },
+    {
+      "tag": "archive-4.6-4.14",
+      "name": "TerminatorPlus-NeoForge-1.21.1-4.6.0-BETA.jar",
+      "asset_name": "TerminatorPlus-NeoForge-1.21.1-4.6.0-BETA.jar",
+      "bytes": 336662,
+      "sha256": "64C59426949D2C0F87CFC9AE12263644680768DF5D66B09920145D9439EDE438",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/archive-4.6-4.14/TerminatorPlus-NeoForge-1.21.1-4.6.0-BETA.jar"
+    },
+    {
+      "tag": "archive-4.6-4.14",
+      "name": "TerminatorPlus-NeoForge-1.21.1-4.7.0-BETA.jar",
+      "asset_name": "TerminatorPlus-NeoForge-1.21.1-4.7.0-BETA.jar",
+      "bytes": 423115,
+      "sha256": "552DD19745718CFBF109A23367F11CDF5C57F931E707BE81A49ACC0261014807",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/archive-4.6-4.14/TerminatorPlus-NeoForge-1.21.1-4.7.0-BETA.jar"
+    },
+    {
+      "tag": "archive-4.6-4.14",
+      "name": "TerminatorPlus-NeoForge-1.21.1-4.8.0-BETA.jar",
+      "asset_name": "TerminatorPlus-NeoForge-1.21.1-4.8.0-BETA.jar",
+      "bytes": 450425,
+      "sha256": "9F39A74565E01F83CA43094D8F4C736D39FDC861D92D65FB4F73014D2ECC20CD",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/archive-4.6-4.14/TerminatorPlus-NeoForge-1.21.1-4.8.0-BETA.jar"
+    },
+    {
+      "tag": "archive-4.6-4.14",
+      "name": "TerminatorPlus-NeoForge-1.21.1-4.9.0-BETA.jar",
+      "asset_name": "TerminatorPlus-NeoForge-1.21.1-4.9.0-BETA.jar",
+      "bytes": 478233,
+      "sha256": "1FC22513952614F1C3CF72AD9C3A8ADA2658BCB2DA25CD65FB08B872F524F089",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/archive-4.6-4.14/TerminatorPlus-NeoForge-1.21.1-4.9.0-BETA.jar"
+    },
+    {
+      "tag": "archive-4.6-4.14",
+      "name": "TerminatorPlus-NeoForge-4.10.0-内测包.zip",
+      "asset_name": "TerminatorPlus-NeoForge-4.10.0-playtest.zip",
+      "bytes": 527809,
+      "sha256": "7B87F919BD818AFE8F6185846064C5D0ABF01EC42E893E3AF954AA4BC644CE32",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/archive-4.6-4.14/TerminatorPlus-NeoForge-4.10.0-playtest.zip"
+    },
+    {
+      "tag": "archive-4.6-4.14",
+      "name": "TerminatorPlus-NeoForge-4.11.0-内测包.zip",
+      "asset_name": "TerminatorPlus-NeoForge-4.11.0-playtest.zip",
+      "bytes": 535891,
+      "sha256": "5A8A2E3E91502CD7C1BBC42257D691D720AF35B55862205394C0CFA4ADCAF42B",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/archive-4.6-4.14/TerminatorPlus-NeoForge-4.11.0-playtest.zip"
+    },
+    {
+      "tag": "archive-4.6-4.14",
+      "name": "TerminatorPlus-NeoForge-4.12.0-内测包.zip",
+      "asset_name": "TerminatorPlus-NeoForge-4.12.0-playtest.zip",
+      "bytes": 633585,
+      "sha256": "8FF83B3BFDCAA0EFC491C82B612F990574BA55E18B4E7B2C00B82994F0E34581",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/archive-4.6-4.14/TerminatorPlus-NeoForge-4.12.0-playtest.zip"
+    },
+    {
+      "tag": "archive-4.6-4.14",
+      "name": "TerminatorPlus-NeoForge-4.13.0-内测包.zip",
+      "asset_name": "TerminatorPlus-NeoForge-4.13.0-playtest.zip",
+      "bytes": 709771,
+      "sha256": "1ECC82FD5E6217846227A9F0C06C5554B2702FF54968CFA3D16C8071414DF67A",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/archive-4.6-4.14/TerminatorPlus-NeoForge-4.13.0-playtest.zip"
+    },
+    {
+      "tag": "archive-4.6-4.14",
+      "name": "TerminatorPlus-NeoForge-4.14.0-内测包.zip",
+      "asset_name": "TerminatorPlus-NeoForge-4.14.0-playtest.zip",
+      "bytes": 771388,
+      "sha256": "825EAB926A5876DA75CF21F529ABA24496F810E225C6081ABDA295D0BAEE6AAC",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/archive-4.6-4.14/TerminatorPlus-NeoForge-4.14.0-playtest.zip"
+    },
+    {
+      "tag": "v4.15.0-BETA",
+      "name": "TerminatorPlus-NeoForge-1.21.1-4.15.0-BETA.jar",
+      "asset_name": "TerminatorPlus-NeoForge-1.21.1-4.15.0-BETA.jar",
+      "bytes": 661913,
+      "sha256": "813E565136A4E836B89840A529AA398106106CBF715D846B31D4A27B110DB80F",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.15.0-BETA/TerminatorPlus-NeoForge-1.21.1-4.15.0-BETA.jar"
+    },
+    {
+      "tag": "v4.15.0-BETA",
+      "name": "TerminatorPlus-NeoForge-4.15.0-内测包.zip",
+      "asset_name": "TerminatorPlus-NeoForge-4.15.0-playtest.zip",
+      "bytes": 851665,
+      "sha256": "54CC2FD581ED8A059F07F0F0A2B317CA4328A2BFADBE79318443103F256949EA",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.15.0-BETA/TerminatorPlus-NeoForge-4.15.0-playtest.zip"
+    },
+    {
+      "tag": "v4.15.0-BETA",
+      "name": "validation-4.15-archive.zip",
+      "asset_name": "validation-4.15-archive.zip",
+      "bytes": 262149,
+      "sha256": "34EBFC986CD1E28D59B4342147012353E1A782E9B5CFED4AC064945EB6347042",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.15.0-BETA/validation-4.15-archive.zip"
+    },
+    {
+      "tag": "v4.15.0-BETA",
+      "name": "TerminatorPlus-NeoForge-4.15-source-checkpoint.zip",
+      "asset_name": "TerminatorPlus-NeoForge-4.15-source-checkpoint.zip",
+      "bytes": 475738,
+      "sha256": "D30C2335B0BD53FB92CD373DAFBA37034CE19F26E59326DC2E796741E90BAB63",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.15.0-BETA/TerminatorPlus-NeoForge-4.15-source-checkpoint.zip"
+    },
+    {
+      "tag": "v4.16.0-BETA",
+      "name": "TerminatorPlus-NeoForge-1.21.1-4.16.0-BETA.jar",
+      "asset_name": "TerminatorPlus-NeoForge-1.21.1-4.16.0-BETA.jar",
+      "bytes": 704748,
+      "sha256": "0896467EE0C3D1D0248B1A35AC8BA8FDC2EA71B2519C72DB2DACCC40B45A1032",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.16.0-BETA/TerminatorPlus-NeoForge-1.21.1-4.16.0-BETA.jar"
+    },
+    {
+      "tag": "v4.16.0-BETA",
+      "name": "TerminatorPlus-NeoForge-4.16.0-内测包.zip",
+      "asset_name": "TerminatorPlus-NeoForge-4.16.0-playtest.zip",
+      "bytes": 778749,
+      "sha256": "4F8B9E1F5982774D06FD80D2631456FB6508685B7430561487D321671ADB9056",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.16.0-BETA/TerminatorPlus-NeoForge-4.16.0-playtest.zip"
+    },
+    {
+      "tag": "v4.16.0-BETA",
+      "name": "validation-4.16-archive.zip",
+      "asset_name": "validation-4.16-archive.zip",
+      "bytes": 201055,
+      "sha256": "57714EF14FBCB83A88C33DCC48F767BC3FFA5C4DE3997380AEDF030A9EC2C53E",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.16.0-BETA/validation-4.16-archive.zip"
+    },
+    {
+      "tag": "v4.16.0-BETA",
+      "name": "TerminatorPlus-NeoForge-4.16-source-checkpoint.zip",
+      "asset_name": "TerminatorPlus-NeoForge-4.16-source-checkpoint.zip",
+      "bytes": 431470,
+      "sha256": "F967386DD4A48FCF50591FA52DD2F0920BB0BBAB783D3825BFDD82EA3FB28E2B",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.16.0-BETA/TerminatorPlus-NeoForge-4.16-source-checkpoint.zip"
+    },
+    {
+      "tag": "v4.17.0-BETA",
+      "name": "TerminatorPlus-NeoForge-1.21.1-4.17.0-BETA.jar",
+      "asset_name": "TerminatorPlus-NeoForge-1.21.1-4.17.0-BETA.jar",
+      "bytes": 731274,
+      "sha256": "CF5BBEC5675E17DCCAD3F0492E35EDB55BF0D92074B1AEF30960FBE1F78A0230",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.17.0-BETA/TerminatorPlus-NeoForge-1.21.1-4.17.0-BETA.jar"
+    },
+    {
+      "tag": "v4.17.0-BETA",
+      "name": "TerminatorPlus-NeoForge-4.17.0-内测包.zip",
+      "asset_name": "TerminatorPlus-NeoForge-4.17.0-playtest.zip",
+      "bytes": 881665,
+      "sha256": "CD637EAF52F3AD30A56EFF1191C1D9721DEDADD9D2CCAA5CA31F86C57E54DD48",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.17.0-BETA/TerminatorPlus-NeoForge-4.17.0-playtest.zip"
+    },
+    {
+      "tag": "v4.17.0-BETA",
+      "name": "validation-4.17-archive.zip",
+      "asset_name": "validation-4.17-archive.zip",
+      "bytes": 158979,
+      "sha256": "4BAAF7167F4EDB03F9B445AF9E2AD302F2D038957B1876B5549AC278DD1A6BC7",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.17.0-BETA/validation-4.17-archive.zip"
+    },
+    {
+      "tag": "v4.17.0-BETA",
+      "name": "TerminatorPlus-NeoForge-4.17-source-checkpoint.zip",
+      "asset_name": "TerminatorPlus-NeoForge-4.17-source-checkpoint.zip",
+      "bytes": 449877,
+      "sha256": "B09FE186B4489F490CBB84A1EB77DE945ED282120845E4BB6282CF8618D8A7BE",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.17.0-BETA/TerminatorPlus-NeoForge-4.17-source-checkpoint.zip"
+    },
+    {
+      "tag": "v4.18.0-BETA",
+      "name": "TerminatorPlus-NeoForge-1.21.1-4.18.0-BETA.jar",
+      "asset_name": "TerminatorPlus-NeoForge-1.21.1-4.18.0-BETA.jar",
+      "bytes": 761198,
+      "sha256": "2D3005E972027752B76A82E8459F903140262025EC8DC67D02466CB2FACC3C43",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.18.0-BETA/TerminatorPlus-NeoForge-1.21.1-4.18.0-BETA.jar"
+    },
+    {
+      "tag": "v4.18.0-BETA",
+      "name": "TerminatorPlus-NeoForge-4.18.0-内测包.zip",
+      "asset_name": "TerminatorPlus-NeoForge-4.18.0-playtest.zip",
+      "bytes": 1211479,
+      "sha256": "6A912A45D889D45671AFFF4819EB6EEA2714139972901738438389D25640466F",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.18.0-BETA/TerminatorPlus-NeoForge-4.18.0-playtest.zip"
+    },
+    {
+      "tag": "v4.18.0-BETA",
+      "name": "validation-4.18-archive.zip",
+      "asset_name": "validation-4.18-archive.zip",
+      "bytes": 384295,
+      "sha256": "9B3FDB0F7F988809B26DEDE8DB283B73949668C58F93FC5EEE02DD31F3F03FD8",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.18.0-BETA/validation-4.18-archive.zip"
+    },
+    {
+      "tag": "v4.18.0-BETA",
+      "name": "TerminatorPlus-NeoForge-4.18-source-checkpoint.zip",
+      "asset_name": "TerminatorPlus-NeoForge-4.18-source-checkpoint.zip",
+      "bytes": 476080,
+      "sha256": "295FA22D900697096B6ABEEC9D37E9510D64D69A75F26FE3B7A1DFCA6686184A",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.18.0-BETA/TerminatorPlus-NeoForge-4.18-source-checkpoint.zip"
+    },
+    {
+      "tag": "v4.19.0-BETA",
+      "name": "TerminatorPlus-NeoForge-1.21.1-4.19.0-BETA.jar",
+      "asset_name": "TerminatorPlus-NeoForge-1.21.1-4.19.0-BETA.jar",
+      "bytes": 778249,
+      "sha256": "4408F1E5524D6FE4129664A9C7CA1B3F06856536B90C3FF1D87BB7943CCC8D20",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.19.0-BETA/TerminatorPlus-NeoForge-1.21.1-4.19.0-BETA.jar"
+    },
+    {
+      "tag": "v4.19.0-BETA",
+      "name": "TerminatorPlus-NeoForge-4.19.0-内测包.zip",
+      "asset_name": "TerminatorPlus-NeoForge-4.19.0-playtest.zip",
+      "bytes": 1188207,
+      "sha256": "6AF85E48BE687E863DF82FD573180F53B2C26E9C8C5045EE807AE204EC641DBF",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.19.0-BETA/TerminatorPlus-NeoForge-4.19.0-playtest.zip"
+    },
+    {
+      "tag": "v4.19.0-BETA",
+      "name": "validation-4.19-archive.zip",
+      "asset_name": "validation-4.19-archive.zip",
+      "bytes": 386227,
+      "sha256": "8B09AD4452309AFEA6BFB79950F5E0ECDA789D4BB079FC6C31F22978D62BC959",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.19.0-BETA/validation-4.19-archive.zip"
+    },
+    {
+      "tag": "v4.19.0-BETA",
+      "name": "TerminatorPlus-NeoForge-4.19-source-checkpoint.zip",
+      "asset_name": "TerminatorPlus-NeoForge-4.19-source-checkpoint.zip",
+      "bytes": 408263,
+      "sha256": "5AB6F18B90B144B6F13196F5502B4F187CACD268580EBA425248004994DA5D38",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.19.0-BETA/TerminatorPlus-NeoForge-4.19-source-checkpoint.zip"
+    },
+    {
+      "tag": "v4.20.0-BETA",
+      "name": "TerminatorPlus-NeoForge-1.21.1-4.20.0-BETA.jar",
+      "asset_name": "TerminatorPlus-NeoForge-1.21.1-4.20.0-BETA.jar",
+      "bytes": 784816,
+      "sha256": "D76634BAF1CD1983CEAF18EFC526AF73EACCBB214FAEBA6C9E88FB9300EF1032",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.20.0-BETA/TerminatorPlus-NeoForge-1.21.1-4.20.0-BETA.jar"
+    },
+    {
+      "tag": "v4.20.0-BETA",
+      "name": "validation-4.20-archive.zip",
+      "asset_name": "validation-4.20-archive.zip",
+      "bytes": 86910,
+      "sha256": "E0403E8EC06FBB5000570FF8EC9D0A7404981C1F356E818E64C8B4B092FF0714",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.20.0-BETA/validation-4.20-archive.zip"
+    },
+    {
+      "tag": "v4.20.0-BETA",
+      "name": "TerminatorPlus-NeoForge-4.20-source-checkpoint.zip",
+      "asset_name": "TerminatorPlus-NeoForge-4.20-source-checkpoint.zip",
+      "bytes": 409446,
+      "sha256": "86280F15A3039F4719B66347213FAEFB249EAF3672DEFEC68748F6AADE8D9808",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.20.0-BETA/TerminatorPlus-NeoForge-4.20-source-checkpoint.zip"
+    },
+    {
+      "tag": "v4.21.0-BETA",
+      "name": "TerminatorPlus-NeoForge-1.21.1-4.21.0-BETA.jar",
+      "asset_name": "TerminatorPlus-NeoForge-1.21.1-4.21.0-BETA.jar",
+      "bytes": 793522,
+      "sha256": "9A491FE1BA42C1933B271B213F7E19305386107A5C145DEC708CAA1B0DDACD57",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.21.0-BETA/TerminatorPlus-NeoForge-1.21.1-4.21.0-BETA.jar"
+    },
+    {
+      "tag": "v4.21.0-BETA",
+      "name": "validation-4.21-archive.zip",
+      "asset_name": "validation-4.21-archive.zip",
+      "bytes": 187894,
+      "sha256": "88B9093F3586E63BCE5DC54C2F6570A4F6BCF47BCA65B440BDCE4CC227B0BF28",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.21.0-BETA/validation-4.21-archive.zip"
+    },
+    {
+      "tag": "v4.21.0-BETA",
+      "name": "TerminatorPlus-NeoForge-4.21-source-checkpoint.zip",
+      "asset_name": "TerminatorPlus-NeoForge-4.21-source-checkpoint.zip",
+      "bytes": 415731,
+      "sha256": "F7EDB06E8E42297AD079B6B2ADA898E355A2D12A34330010A6BAA3160DB4ECAC",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.21.0-BETA/TerminatorPlus-NeoForge-4.21-source-checkpoint.zip"
+    },
+    {
+      "tag": "v4.22.0-BETA",
+      "name": "TerminatorPlus-NeoForge-1.21.1-4.22.0-BETA.jar",
+      "asset_name": "TerminatorPlus-NeoForge-1.21.1-4.22.0-BETA.jar",
+      "bytes": 839162,
+      "sha256": "12E4896231F496BADD3FDA810A9974257A1128BF64CD5BC11CA15E46BBA0DC4E",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.22.0-BETA/TerminatorPlus-NeoForge-1.21.1-4.22.0-BETA.jar"
+    },
+    {
+      "tag": "v4.22.0-BETA",
+      "name": "4.18-missile-intercept-experiment.zip",
+      "asset_name": "4.18-missile-intercept-experiment.zip",
+      "bytes": 81136,
+      "sha256": "00307D03EE5DAFD15A4C08B4819515D786745BA97A6FF4A4827837F5E3EC336C",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.22.0-BETA/4.18-missile-intercept-experiment.zip"
+    },
+    {
+      "tag": "v4.22.0-BETA",
+      "name": "ai-thread-benchmark-paused.zip",
+      "asset_name": "ai-thread-benchmark-paused.zip",
+      "bytes": 231750,
+      "sha256": "66FD418E748E130FE6A3422EC713B20EE8D76E5B6DCD9CC7BC940AC40C848B66",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.22.0-BETA/ai-thread-benchmark-paused.zip"
+    },
+    {
+      "tag": "v4.22.0-BETA",
+      "name": "development-evidence-20261007.zip",
+      "asset_name": "development-evidence-20261007.zip",
+      "bytes": 3269685,
+      "sha256": "01416EFDA80413572B6FF652EDA435AE6EECC540B53084A7C1C70454317CCD90",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.22.0-BETA/development-evidence-20261007.zip"
+    },
+    {
+      "tag": "v4.22.0-BETA",
+      "name": "validation-4.22-archive.zip",
+      "asset_name": "validation-4.22-archive.zip",
+      "bytes": 333422,
+      "sha256": "E9879CF8C5D8C800AF6C1DC5C1818E49CA0E0DEE51BCC76552979D628E3B7B48",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.22.0-BETA/validation-4.22-archive.zip"
+    },
+    {
+      "tag": "v4.22.0-BETA",
+      "name": "TerminatorPlus-NeoForge-4.22-source-checkpoint.zip",
+      "asset_name": "TerminatorPlus-NeoForge-4.22-source-checkpoint.zip",
+      "bytes": 446359,
+      "sha256": "30BE5C499C5FF5D3FFC262D37D0EA9208DF7B1BF0172770B0583A4D28613E8E7",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.22.0-BETA/TerminatorPlus-NeoForge-4.22-source-checkpoint.zip"
+    },
+    {
+      "tag": "v4.22.0-BETA",
+      "name": "battle-telemetry-4.22-archive.zip",
+      "asset_name": "battle-telemetry-4.22-archive.zip",
+      "bytes": 279297,
+      "sha256": "BA242236BAD2403F94795FCFF047491D6D42815FA5117B2EFDDE2BD80436192F",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.22.0-BETA/battle-telemetry-4.22-archive.zip"
+    },
+    {
+      "tag": "v4.22.0-BETA",
+      "name": "SHA256SUMS.txt",
+      "asset_name": "SHA256SUMS.txt",
+      "bytes": 5153,
+      "sha256": "F2C999F180BFE92B87945B017A56B04520AE7A25DC4AC791E922F9941E3C0750",
+      "verified_by": "GitHub SHA256",
+      "url": "https://github.com/sulfurchi-art/TerminatorPlus-NeoForge/releases/download/v4.22.0-BETA/SHA256SUMS.txt"
+    }
+  ],
+  "frozen_production_files_unchanged": 118,
+  "evidence_records": 483,
+  "verified_main_before_this_metadata_commit": "2b4725d1f815f09deced70f02681da57590ac100",
+  "scope": "GitHub branches, annotated source tags, uploaded release assets and unchanged frozen production files; no new gameplay test run"
+}

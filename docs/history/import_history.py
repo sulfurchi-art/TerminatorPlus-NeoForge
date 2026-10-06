@@ -459,8 +459,71 @@ def verify_remote():
     (WORK / "github-archive-remote-verification-20261007.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"Verified {len(releases)} releases, {len(remote_assets)} original/generated assets and unchanged production files.", flush=True)
 
+def record_delivery():
+    plan = plan_data()
+    proof_path = WORK / "github-archive-remote-verification-20261007.json"
+    proof = json.loads(proof_path.read_text(encoding="utf-8"))
+    if proof["main"] != plan["main"] or len(proof["assets_verified"]) != 48:
+        raise RuntimeError("Complete remote verification required before recording delivery")
+    proof["verified_main_before_this_metadata_commit"] = proof.pop("main")
+    proof["scope"] = "GitHub branches, annotated source tags, uploaded release assets and unchanged frozen production files; no new gameplay test run"
+    write("docs/history/github-upload-verification.json", json.dumps(proof, ensure_ascii=False, indent=2) + "\n")
+    write("docs/history/import_history.py", Path(__file__).read_bytes())
+    readme = (STAGE / "docs/history/README.md").read_text(encoding="utf-8")
+    readme += "\n\n## 上传核对\n\n已核对九个远端标签与对应提交、九个公开预发布 Release，以及全部 48 个附件的 GitHub SHA256。483 份开发/测试资料已归档，其中包含 49 份战局 JSONL；118 个冻结生产文件保持原哈希。详情见 [上传核对记录](github-upload-verification.json)。\n\n[本次归档脚本](import_history.py) 保存导入、上传和核对流程，运行时依赖原工作区布局，仅作过程记录，不自动执行。\n"
+    write("docs/history/README.md", readme)
+    old_main = plan["main"]
+    plan["main"] = commit("docs: record verified GitHub archive delivery and import procedure")
+    if git("ls-remote", "origin", "refs/heads/main").split()[0] != old_main:
+        raise RuntimeError("Remote main changed before audit-record upload")
+    command(["git", "-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential", "push", "origin", "main"], cwd=STAGE)
+    (WORK / "github-archive-plan-20261007.json").write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print("Remote verification record committed and pushed: " + plan["main"], flush=True)
+
+def synchronize_checkout():
+    plan = plan_data()
+    before = {n: sha((REPO / n).read_bytes()) for n in current_files()}
+    if before != plan["source_before"]:
+        raise RuntimeError("Original checkout changed during upload; preserve those changes instead of synchronizing")
+    if command(["git", "rev-parse", "HEAD"], cwd=REPO) != plan["base"]:
+        raise RuntimeError("Original checkout moved independently")
+    if command(["git", "diff", "--cached", "--name-only"], cwd=REPO):
+        raise RuntimeError("Preserve independently staged changes")
+    command(["git", "fetch", "origin", "+refs/heads/main:refs/remotes/origin/main", "refs/heads/" + plan["experiment_branch"] + ":refs/remotes/origin/" + plan["experiment_branch"], "--tags"], cwd=REPO)
+    if command(["git", "rev-parse", "origin/main"], cwd=REPO) != plan["main"]:
+        raise RuntimeError("Remote main differs from verified delivery")
+    paths = git("ls-files", "-z").split("\0")
+    for n in paths:
+        if not n:
+            continue
+        source = STAGE / n
+        target = REPO / n
+        if not target.resolve().is_relative_to(REPO.resolve()):
+            raise RuntimeError("Synchronization path escaped original repository")
+        raw = source.read_bytes()
+        if not target.is_file() or target.read_bytes() != raw:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(raw)
+    command(["git", "config", "core.autocrlf", "false"], cwd=REPO)
+    command(["git", "config", "user.name", "sulfurchi-art"], cwd=REPO)
+    command(["git", "config", "user.email", "255677455+sulfurchi-art@users.noreply.github.com"], cwd=REPO)
+    # The working files already match the imported history. Update only the ref and index;
+    # no reset, cleanup or replacement of the sealed production files is needed.
+    command(["git", "update-ref", "refs/heads/main", plan["main"], plan["base"]], cwd=REPO)
+    command(["git", "read-tree", plan["main"]], cwd=REPO)
+    frozen = json.loads((WORK / "4.22-final-source.json").read_text(encoding="utf-8-sig"))
+    if any(sha((REPO / n).read_bytes()) != digest for n, digest in frozen.items()):
+        raise RuntimeError("Synchronization changed frozen production files")
+    status = command(["git", "status", "--porcelain"], cwd=REPO)
+    if status:
+        raise RuntimeError("Synchronization left unexpected differences: " + status)
+    result = {"date": "2026-10-07", "branch": "main", "head": plan["main"], "worktree_clean": True,
+              "upstream_matches": True, "frozen_files_unchanged": len(frozen), "original_artifacts_preserved": True}
+    (WORK / "github-archive-local-sync-20261007.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(result, indent=2), flush=True)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=["inventory", "prepare", "publish", "finalize", "verify"])
+    parser.add_argument("mode", choices=["inventory", "prepare", "publish", "finalize", "verify", "record", "sync"])
     args = parser.parse_args()
-    {"inventory": inventory, "prepare": prepare, "publish": publish, "finalize": finalize_assets, "verify": verify_remote}[args.mode]()
+    {"inventory": inventory, "prepare": prepare, "publish": publish, "finalize": finalize_assets, "verify": verify_remote, "record": record_delivery, "sync": synchronize_checkout}[args.mode]()
