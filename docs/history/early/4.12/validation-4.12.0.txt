@@ -1,0 +1,26 @@
+TerminatorPlus-NeoForge 4.12.0-BETA manual playtest
+Validated: 2026-10-05
+Minecraft: 1.21.1
+Java: Microsoft OpenJDK 21.0.7
+Final build and vanilla regression: NeoForge 21.1.1 (minimum retained)
+Native warfare integration: NeoForge 21.1.249, Superb Warfare 0.8.9.1 and Kotlin for Forge 5.12.0
+SBW installed JAR/source commit: 5b92ebe1da5daad9cc5e8ae28e3e06f1636f5816
+Build: SUCCESSFUL
+Vanilla SelfTest: 128 PASS / 0 FAIL / 128 total
+Current vanilla failure names: none
+Native warfare SelfTest: ALL 14 CHECKS PASSED
+Historical same-side team dive synchronization remains pending; this batch does not claim it is fixed.
+Jar: TerminatorPlus-NeoForge-1.21.1-4.12.0-BETA.jar
+Jar bytes: 552801
+SHA256: FD50B7F6B60C3AE24711A05F5178148A5FA2C9B18B24089ECE172665A72E7AB4
+Jar inspection: archive integrity, exact version, minimum NeoForge, optional SBW ordering, explicit AT, chatter resources and every compiled main class byte confirmed.
+No third-party mod classes or assets are bundled.
+Source base: c1fcf77; local changes remain uncommitted and unpushed.
+Full functional log: ai-hardness-4.12.0-selftest.log
+Native integration log: ai-hardness-4.12.0-warfare.log
+Build log: ai-hardness-4.12.0-build.log
+
+Validated native scenarios: exact-version API loading; finite AK-47 ammo/reload and real attributed damage; six loaded rounds stop at six; difficulty 10 replenishes native reserve but preserves a real reload gap; ability disable returns the same gun and resumes native sword damage; AWM bolt cadence and real damage; AA-12/AWM distance switching; firing stops behind an opaque wall and last-seen pursuit continues; allied obstruction blocks fire; real golden-apple use restores the same owned gun; RPG selected over an ineffective rifle damages a real occupied M1A2; live GunProp overrides control RPM/magazine/reload; twelve AA-12 bots stay within a global 64-projectile-per-tick budget with all owners served; low-level bounded turning still allows actual shots.
+
+This release adds gun operation at difficulties 1-10 and anti-vehicle weapon selection for existing hostile riders. It does not implement 10EX, vehicle driving/crew, empty-vehicle acquisition, drones, throwables or military chat. Guided-launcher constraints are implemented but Javelin/IGLA native guidance and countermeasures are not validated. Ordinary supported guns share the native API, but only the listed guns were tested. Safety checks occur before firing and cannot prevent every later collision with a moving teammate.
+The twelve-bot projectile test does not establish 100-bot TPS or asynchronous behavior. All AI/world access remains on the server thread. The broader checklist and async experiments remain paused. All tests used isolated self-test servers; the user's live server was not modified or operated.

@@ -1,0 +1,31 @@
+TerminatorPlus-NeoForge 4.14.0-BETA manual playtest
+Validated: 2026-10-05
+Minecraft 1.21.1; Microsoft OpenJDK 21.0.7
+Final build and base regression: minimum NeoForge 21.1.1
+Native integration: NeoForge 21.1.249, Superb Warfare 0.8.9.1, Kotlin for Forge 5.12.0
+SBW installed JAR/source commit: 5b92ebe1da5daad9cc5e8ae28e3e06f1636f5816
+Build: SUCCESSFUL
+Base SelfTest: 129 PASS / 1 FAIL / 130 total
+Current base failure names: ['teamdive same side native takeoffs spread before a common smash with near member first']
+Native SelfTest: ALL 46 CHECKS PASSED (original 34 plus 12 new feedback/gear checks)
+Two new base checks passed: progressive vanilla OP enchantments; real border-safe infantry retreat/healing.
+Mixed actual native projectile proof: max 60 per tick, 2912 total, all 10 owners served over at least 120 ticks.
+Both mounted budget fixtures read native delay 4 and 16 projectiles; each emitted an actual 16-projectile burst.
+Historical same-side team dive synchronization remains independently pending.
+Jar: TerminatorPlus-NeoForge-1.21.1-4.14.0-BETA.jar
+Jar bytes: 641637
+SHA256: 2E942044B824EB8CBA3F8A134A60A0AFF998A05432DE1687B2DB8CB1ADA849AB
+Jar inspection: CRC, version, minimum NeoForge, optional SBW ordering, explicit AT, chatter resources and every compiled main class byte confirmed.
+No third-party classes or assets bundled. Source base c1fcf77; changes uncommitted and unpushed.
+Logs: ai-hardness-4.14.0-selftest.log, ai-hardness-4.14.0-warfare.log, ai-hardness-4.14.0-build.log
+
+New native checks: driver-alone versus driver-and-commander actual M1A2 cannon damage; 150-block border actual low-health retreat/braking; stable real dual-empty-gun reload while distance/skills change; sequential actual AK/AA12/RPG idle preparation including native alternate ammo choice; close native MG/vehicle_strike damage; preloaded covered RPG actual tank damage and withdrawal; low-health tank does not retreat from native-zero-damage infantry; level-seven covered native 100-tick RPG reload followed by reacquisition/damage; actual-team bait/flank with native lateral RPG owner/damage; finite native 40-tick medical kit healing/regeneration; weapon-disabled native driving causes real vehicle_strike; all 1-10 SBW kits registry/armor/owned ammo/progressive enchantments/settings persistence.
+Existing rifle 5v5 fixture now starts with empty AK and AA12: all ten owners fire real native projectiles, move, and preserve pearls/fireworks while in usable rifle range.
+The cannon comparison also passed before the production safety change: commander obstruction is unconfirmed, intermittent non-firing is not declared fully diagnosed.
+
+Gear defaults: /bot settings gear vanilla|warfare; explicit presets take priority. Existing bots: /bot inventory default <mode> <1-10> [bot|all], AI difficulty unchanged. SBW kit only SBW items except universal totem/elytra/firework/pearl. Native SBW armor has registered helmet/chest only, no vanilla leg/feet substitutes. Guns explicitly reject enchantments; supported armor/blades/elytra receive progressive legal enchantments. Vanilla ten receives a maximum legal OP kit. Medical kit and crust use native item completion; armor plates/grenades/smoke/C4/TM62/detonator are inventory provisions only, autonomous use pending.
+Vehicle physics and movement limits remain native; no position/velocity/rotation writes. Difficulty ten supplies native energy/reserve but retains reload/heat and does not repair vehicle health.
+Updated full report arrived during development: helicopter strafing/AA evasion/passenger firing angles, lost-target vehicle return, tail-side boarding and multicrew suggestions remain a later batch. Border safeguards are implemented but no new helicopter border acceptance scenario was added.
+Guidance/decoy effectiveness, special weapons, fixed-wing/ship/drone driving, indirect artillery, radar and 10EX remain unvalidated or unimplemented per SUPERB_WARFARE.md.
+Tests do not establish 100-bot TPS or asynchronous AI. All world/AI work remains on the server thread.
+All tests ran on isolated servers. The live server was not operated or modified. Formal-server rifle 5v5, M1A2 duels, and infantry-RPG acceptance still require user playtesting.

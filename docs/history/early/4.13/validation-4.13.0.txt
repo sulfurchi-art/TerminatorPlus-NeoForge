@@ -1,0 +1,26 @@
+TerminatorPlus-NeoForge 4.13.0-BETA manual playtest
+Validated: 2026-10-05
+Minecraft: 1.21.1; Java: Microsoft OpenJDK 21.0.7
+Final build and base regression: NeoForge 21.1.1 (minimum retained)
+Native integration: NeoForge 21.1.249, Superb Warfare 0.8.9.1, Kotlin for Forge 5.12.0
+SBW installed JAR/source commit: 5b92ebe1da5daad9cc5e8ae28e3e06f1636f5816
+Build: SUCCESSFUL
+Base SelfTest: 127 PASS / 1 FAIL / 128 total
+Current base failure names: ['teamdive same side native takeoffs spread before a common smash with near member first']
+Native SelfTest: ALL 34 CHECKS PASSED (14 original gun, 7 movement/skills, 13 vehicle checks)
+Mixed actual native projectile proof: max 60 per tick, 2912 total, all 10 owners served over at least 120 ticks.
+Both mounted budget fixtures read native delay 4 and 16 projectiles; each emitted an actual 16-projectile burst.
+Historical same-side team dive synchronization remains independently pending.
+Jar: TerminatorPlus-NeoForge-1.21.1-4.13.0-BETA.jar
+Jar bytes: 614170
+SHA256: A7BDF5EAEDBB59B0383217AAA2F5BBE19F2F6F07103F8641F8A191A0109DCF34
+Jar inspection: CRC, version, minimum NeoForge, optional SBW ordering, explicit AT, chatter resources and every compiled main class byte confirmed.
+No third-party classes or assets bundled. Source base: c1fcf77; changes uncommitted and unpushed.
+Logs: ai-hardness-4.13.0-selftest.log, ai-hardness-4.13.0-warfare.log, ai-hardness-4.13.0-build.log
+
+Gun feedback: real sideways movement at difficulties 4-10, closing shotgun distance, real owned pearl with gun restoration, movement during native reload, actual retreat/apple/regeneration and return to real firing, native elytra/fireworks, original level-five five-versus-five kits sixty blocks apart. A long recovery now briefly searches the prior observed location without reading hidden positions.
+Vehicle checks: unique native crew seats and real M1A2 driving; both M1A2 weapon seats produce owned projectiles and damage; BMP-2 firing-port weapon with human driver protected; AH-6 native takeoff/travel/landing; AH-6 personal rifle in ground and actual airborne open seats; Mi-28 seat-one native cannon during actual flight; occupied/enemy seats and invalid commands rejected; airborne leave waits for landing; level-nine mounted finite six-round reserve; native BanHand seat cannot consume/fire a personal gun; mixed delayed mounted and immediate handheld budget; pending native volley preserves its selected gun when target boards armor, then switches after emission.
+Vehicle physics and movement limits are native. Difficulty ten supplies native energy/reserve, retains native reload/heat, and does not repair health. Other vehicles using matching schemas are unverified. Complex terrain, high-speed aerial combat and countermeasure effectiveness require manual testing.
+Guided-launcher native guidance, special fire procedures, fixed-wing/ship/airship/drone driving, zero-seat artillery, throwables, radar and 10EX remain unimplemented or unvalidated as described in SUPERB_WARFARE.md.
+The projectile tests do not establish 100-bot TPS or asynchronous AI. All world/AI work remains on the server thread.
+All tests used isolated self-test servers. The live server was not operated or modified. User observation of the original live five-versus-five scene remains pending; automated tests do not replace that acceptance.

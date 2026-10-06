@@ -1,0 +1,147 @@
+# TerminatorPlus — NeoForge 1.21.1 移植版
+
+把 [HorseNuggets/TerminatorPlus](https://github.com/HorseNuggets/TerminatorPlus)（Paper 1.21.1 插件）重写为 **NeoForge 1.21.1** 模组。
+机器人是服务端的"假玩家"：会追击目标、搭路、垫高、挖穿障碍、空中落水自救、过岩浆放船，还能用一个小型神经网络做种群强化训练。
+
+- Minecraft **1.21.1**，NeoForge **21.1.1 及以上**的任意 21.1.x 版本，Java **21**
+- 纯服务端模组：放在专用服务器的 `mods/` 即可，玩家客户端**不需要**安装（原版/NeoForge 客户端都能进）；单人游戏装在客户端里也能用
+- 许可证：EPL-2.0（与原项目一致），原作者 HorseNuggets 及贡献者
+
+## 安装
+
+```bash
+./gradlew build
+```
+
+产物在 `build/libs/TerminatorPlus-NeoForge-1.21.1-4.12.0-BETA.jar`，放进服务器（或客户端）的 `mods/` 文件夹。
+
+当前 4.12 加入 Superb Warfare 0.8.9.1-final 的可选枪械支持：1–10 级持枪、瞄准、真实弹药和换弹、按距离换枪，以及对敌方乘坐载具的武器判断。用法和当前范围见 [`SUPERB_WARFARE.md`](SUPERB_WARFARE.md)。4.11 的飞行频率和地面行动修正继续保留。最终验证结果见 `AI_HARDNESS_PROGRESS.md`；4.10 的同向团队俯冲失步仍列为独立待修项。
+
+## 命令
+
+与原插件一致（需要权限 `terminatorplus.manage`，默认 OP 等级 2 及以上；装了权限模组时可单独授予）。
+
+| 命令 | 别名 | 说明 |
+|---|---|---|
+| `/terminatorplus` | `/tplus` | 模组信息；`debuginfo` 把调试信息上传到 mclo.gs |
+| `/bot create <名字> [皮肤] [位置]` | `/npc` | 生成一个机器人 |
+| `/bot multi <数量> <名字> [皮肤] [位置]` | | 批量生成，名字里的 `%` 会被替换成序号 |
+| `/bot give <物品>` | | 设置所有机器人的默认武器（决定攻击伤害） |
+| `/bot armor <none\|leather\|chain\|gold\|iron\|diamond\|netherite>` | | 给所有机器人穿盔甲 |
+| `/bot info <名字>` · `/bot count` · `/bot reset` | | 查看 / 计数 / 全部移除 |
+| `/bot settings setgoal <目标模式>` | | `nearestenemy`、`nearestvulnerableplayer`、`nearestplayer`、`nearesthostile`、`nearestraider`、`nearestmob`、`nearestbot`、`nearestbotdiffer`、`nearestbotdifferalpha`、`customlist`、`player`、`none` |
+| `/bot settings mobtarget <true\|false>` | | 是否允许怪物以机器人为目标 |
+| `/bot settings playertarget <玩家>` | | 配合 `player` 模式锁定一名玩家 |
+| `/bot settings addplayerlist <true\|false>` | | 新机器人加入玩家列表（Tab 栏可见、会被 `@a`/`@p` 选中） |
+| `/bot settings region <x1 y1 z1 x2 y2 z2> <wX wY wZ>\|strict\|clear` | | 设置优先/限定目标区域 |
+| `/bot debug <方法(参数)>` | | 调试方法，例如 `/bot debug confuse(10)`、`sit()`、`toggleAgent()` |
+| `/ai random <数量> <名字> [皮肤] [位置]` | | 生成带随机神经网络（会举盾）的机器人 |
+| `/ai reinforcement <种群大小> <名字> [皮肤]` | | 开始种群强化训练（需玩家执行，机器人生成在其上方） |
+| `/ai stop` · `/ai info <名字>` | | 结束训练 / 查看机器人的网络权重 |
+| `/botenvironment addSolid\|removeSolid <方块>` 或 `<x y z>` | `/botenv` | 手动把方块视为实心 |
+| `/botenvironment addCustomMob\|removeCustomMob <实体>` · `mobListType` | | 自定义目标生物列表 |
+| `/bot inventory give <物品> [数量]` | `/bot inv` | 往所有机器人的背包里放物品 |
+| `/bot inventory kit <elytra\|mace\|pearl\|windcharge\|bow\|full>` | | 一键发套装（见下文"强化 AI"） |
+| `/bot inventory clear` · `/bot inventory show <名字>` | | 清空背包 / 查看某个机器人的物品 |
+| `/bot settings range <格数\|unlimited>` | | 索敌范围，默认 `unlimited` |
+| `/bot settings ability <能力> <true\|false>` | | 单独开关各项强化能力 |
+| `/bot settings hardness <1–10> [机器人名]` | | 设置全体与默认难度，或单个机器人的难度；默认 7 |
+| `/bot preset <save\|list\|use\|apply\|delete\|profile> ...` | `/bot loadout` | 保存玩家装备、选用默认预设或给已有机器人配装 |
+| `/bot createpreset <预设> <名字> <难度> [team\|none] [皮肤] [位置]` | | 异步生成后同时应用装备、难度与队伍 |
+| `/bot team <队伍\|none> [机器人名]` | | 分配现有原版队伍，省略名字时设置全体 |
+| `/bot settings defaultgear <true\|false>` | | 无预设时按难度发默认装备，只影响新生成机器人 |
+| `/bot settings reload` | | 重载持久化设置与文本装备预设 |
+| `/bot settings chatter <off\|mild\|spicy>` · `/bot chatter reload` | | 设置 10 级台词强度 / 重载台词 |
+| `/bot settings buildblock <方块>` | | 机器人搭柱、搭桥、垫脚用的方块，默认圆石，比如 `minecraft:obsidian`（必须是完整方块，用不完） |
+
+`[位置]` 可以是在线玩家名，或 `x y z [维度]`，坐标支持 `~` 相对坐标；维度用 `minecraft:the_nether` 这类 id，也兼容原插件的 `world` / `world_nether` / `world_the_end`。
+
+## AI 难度与装备预设
+
+新增 **AI hardness 1–10**，默认 **7** 对应之前的行为。1–6 逐级放慢反应与攻击、减少技能；8–10 增加撤离补给、掩体、团队药水与包抄、剑斧原版暴击、移动目标重锤预判。难度本身不会提供额外移动能力。10 级另有读人、抓窗口、经实际命中确认的条件连招、假俯冲/假撤退、敌方珍珠落点截击、无图腾压迫、随机招式选择和对真人的结果学习；保留自动回血、无限物资和无耐久损耗，图腾仍有限。完整说明与难度表见 [`AI_HARDNESS.md`](AI_HARDNESS.md)，已完成和待开发项目见 [`AI_HARDNESS_PROGRESS.md`](AI_HARDNESS_PROGRESS.md)。
+
+```mcfunction
+/bot settings hardness 3
+/bot settings hardness 10 Steve
+/bot preset save elite
+/bot preset use elite
+/bot create Steve
+/bot createpreset elite Elite 10 none
+```
+
+`preset save` 保存执行玩家当前背包、护甲、副手和手持武器，保留物品组件、附魔、耐久与数量，重启后仍可使用。背包请空出一个格子。队伍使用原版 `/team`，可用 `/bot team <队伍> [机器人名]` 分配。
+
+## 强化 AI
+
+在原插件"直线追击 + 挖穿一切"的基础上增加了下面这些能力。物品类能力**只有机器人背包里有对应物品时才会使用**（`/bot inventory` 发放）；每项都能用 `/bot settings ability` 关掉。
+
+| 能力 | 名字 | 做什么 |
+|---|---|---|
+| 防卡死 | `pathfinding` | 4 秒没有接近目标就判定为卡住，按顺序轮换脱困手段：用原版寻路绕路 → 在墙边搭方块翻过去 → 去附近的梯子/藤蔓爬上去 → 扔末影珍珠 → 鞘翅飞过去 → 侧跳。挖到基岩这类挖不动的方块会立即触发，不再傻挖 |
+| 翻越障碍 | `climbing` | 搭柱翻墙（最高 10 格）、爬梯子/藤蔓/脚手架、从高出水面一格的岸边跳出水、被方块卡在身体里时自动挤出来、路上的木门和栅栏门会打开 |
+| 鞘翅 + 烟花 | `elytra` | 目标水平距离 ≥ 30 格（或在 10 格以上的高处）时起飞：自动从背包换上鞘翅、烟花助推、贴地/撞墙前拉升，到目标附近降落后接着近战，落地后换回胸甲。飞行物理与原版鞘翅一致，1–9 级鞘翅照常掉耐久，10 级装备不损坏 |
+| 重锤 | `mace` | 有重锤时：远处目标用鞘翅爬升到目标上方约 14 格，拉起减速后松开鞘翅下落，空中修正方向砸下去；近处（≤ 5.5 格）有风弹就往脚下扔风弹弹起来砸。伤害、附魔、范围击退、音效、耐久全部走原版重锤逻辑（测试中一击 47 点）。任何带重锤的下落攻击都会自动变成重锤冲击 |
+| 末影珍珠 | `pearls` | 目标在 20–60 格外时扔珍珠追近，比鞘翅快，所以有鞘翅也会先扔（血量 ≥ 10 才扔，珍珠本身扣 5 血）；卡住时用来脱困；掉进虚空时扔回最后站过的地面或目标身边。落点由模拟原版弹道算出，不会往岩浆、仙人掌上扔 |
+| 风弹 | `windcharges` | 配合重锤的弹跳起手 |
+| 卓越前线枪械 | `guns` | 安装准确版本后，使用背包里的真实枪械；1–9 消耗备弹，10 无限备弹但仍需换弹。支持难度分档、开镜、短点射、载具减伤判断和弹丸预算。详见 `SUPERB_WARFARE.md` |
+| 弓箭 | `bow` | 目标在 8–60 格外、有射击线路时站定拉满弓（1 秒），按原版箭矢弹道算抛物线并预判目标走位后松手。走的是原版弓的逻辑：力量、冲击、火矢、无限、耐久都生效，1–9 级没有无限附魔就消耗箭，10 级保留箭。16 格内射得没那么勤，留时间给近战和重锤 |
+| 图腾 | `totems` | 副手的不死图腾一爆，立刻从背包里补一个上去 |
+| 撤离补给 | `recovery` | 8–10 级低血量或持续受击时选择安全位置，实际吃食物、金苹果或喝恢复药水；9–10 级可吃紫颂果脱困 |
+| 团队战术 | `teamwork` | 8–10 级随队集火、增益药水、伤员护卫与射击避让；10 级前排/侧翼/弓手分工 |
+| 跳跃暴击 | `criticals` | 8–10 级的剑斧使用原版冷却、附魔、耐久和下落暴击 |
+| 自动举盾 | `shield` | 8–10 级预判来箭或近战动作，使用真实盾牌，遵守 5 tick 起手和原版冷却；低血时优先保留图腾 |
+| 假动作 | `deception` | 仅 10 级，在健康且没有受压时假俯冲或假撤退，受伤或需要恢复时取消 |
+| 珍珠截击 | `interception` | 仅 10 级，预测敌方实际飞行珍珠的落点，能接近时抢先转移并等待对手落地 |
+| 反击 | `retaliate` | 5 秒内谁打了它，就优先打谁（不管当前目标模式），创造/旁观模式玩家除外 |
+
+**关于索敌范围**：原插件的索敌在同一维度内其实没有距离上限（遍历整个世界已加载的玩家/实体），实际限制来自"实体所在区块必须被加载"。所以这里做的是：`nearesthostile` 从只认 `Monster` 子类扩展到所有敌对生物（史莱姆、岩浆怪、幻翼、恶魂、潜影贝、疣猪兽……）；加入反击；`/bot settings range` 可以按需限制范围（同时减少大服务器上的遍历开销）；再加上鞘翅和珍珠，远处的目标能真正追得上。
+
+快速体验（默认目标模式会追击生存/冒险模式的玩家）：
+
+```
+/bot create Steve
+/bot inventory kit full
+/gamemode survival
+```
+
+然后跑远一点，或者站到高处。
+
+## 和 Paper 版的差异
+
+行为尽量保持一致，以下是移植时必须改动或顺手修掉的地方：
+
+- **名字格式**：方块、物品、实体统一用注册名（`minecraft:stone`、`zombie`），不再是 Bukkit 的 `STONE` 枚举名（大小写不敏感）。
+- **皮肤异步获取**：原插件在主线程请求 Mojang API，生成机器人时服务器会卡住；现在先异步拉皮肤再在主线程生成。离线环境可加 JVM 参数 `-Dterminatorplus.fetchSkins=false`，机器人使用默认皮肤。
+- **区块加载跟随机器人**：机器人像真实玩家一样加载周围区块，走远后不会因区块不再 tick 而"冻住"。
+- **不留垃圾数据**：加入玩家列表的机器人不会写入 `playerdata/`，所有机器人都不获得进度（不会刷进度公告）、不残留统计数据。
+- **`player` 目标模式**：按原插件说明实现了"找不到指定玩家时退回最近的可攻击玩家"（原代码没实现）。
+- **小修复**：实体推挤的坐标笔误（X/Z 写反）、空中预判垫方块后仍重复判断、排序比较器写错、负 Y 坐标取整错误、`/kick` 机器人、跨维度传送后机器人永久无敌、不可破坏方块判定（现在所有硬度 < 0 的方块都不会被挖）。
+- **装备同步**：只在装备变化时广播，不再每 tick 给全服发装备包。
+- 1–7 级举盾保持旧插件行为；8–10 级推进实际使用时长，持有真实盾牌且举盾达到原版 5 tick 后可格挡。进食、弓箭、近战和举盾切换遵守物品使用互斥。普通高难机器人也会主动防守来箭与近战，盾牌和图腾通过真实背包槽位交换，不会复制物品。
+
+## API（给其他模组）
+
+```java
+BotManager manager = TerminatorPlusAPI.getBotManager(); // 服务器未运行时为 null
+Terminator bot = manager.createBot(new Location(level, x, y, z), "BotName", skinValue, skinSignature);
+```
+
+接口与原版相同，只是 Bukkit 类型换成了原版类型（`Location` → `net.nuggetmc.tplus.api.utils.Location` / `Vec3`，`Block` → `BlockPos`，`Material` → `Block`/`Item`）。改名的几个方法：`getBukkitEntity()` → `getEntity()`，`attack()` → `attackTarget()`，`isFalling()` → `isBotFalling()`。`TerminatorLocateTargetEvent` 发布在 `NeoForge.EVENT_BUS` 上，可取消、可替换目标。
+
+新增的接口方法：背包（`giveItem`、`countItem`、`findItem`、`consumeItem`、`clearInventory`、`getWeapon`）、鞘翅（`startGliding`、`stopGliding`、`fireRocket`、`isGliding`）、投掷物（`throwEnderPearl`、`throwWindCharge`）、重锤（`hasMace`、`canSmash`、`smash`）、弓和图腾（`canShootBow`、`drawBow`、`lowerBow`、`shootBow`、`equipTotem`）、移动（`launch`、`climb`、`setLook`、`getFallHeight`）。机器人背包约定：快捷栏第 0 格是 AI 换工具/方块用的"手"，其余 35 格才是真正的背包。
+
+## 开发
+
+- 接手开发（包括 AI 助手）先看 [`AGENTS.md`](AGENTS.md)：代码结构、机器人的关键机制、测试方法、最近的改动
+- 需要 JDK 21；`./gradlew runServer` / `runClient` 启动开发环境
+- `gradle.properties` 里的 `neo_version` 是编译用的 NeoForge 版本，要保持为 `neo_version_range` 的下限（目前 21.1.1），这样不会误用新版本才有的 API。想在别的 NeoForge 版本上测试，临时改 `neo_version` 再跑 `runSelfTest`
+- `./gradlew runSelfTest` 会启动隔离的超平坦专用服务器，执行 128 项基础功能检查（不安装卓越前线），结束后自动关服。日志搜索 `[SelfTest]`，完整汇总应为 `ALL 128 CHECKS PASSED`。
+- 原有 44 项检查覆盖命令、生成、近战、挖掘、自救、寻路、鞘翅、重锤、风弹、珍珠、弓箭、图腾、玩家列表和强化训练。
+- 难度与预设检查覆盖反应/攻击频率、真实补给及取消、团队药水/友军/分路追击、压力撤离、掩体、暴击、移动目标重锤、完整物品预设、持久化与异步生成。
+- 10 级与配置检查覆盖默认装备、无限普通物资/有限图腾/实际死亡、动作互斥、数值表、旧 NBT 迁移、真人感知/读人、斧破盾换剑、实际伤害学习和定向台词包/限频。
+- 4.8 新增 11 项，验证实际假动作及受伤取消、原版珍珠落点/截击、无图腾压迫、连续来箭格挡并保留盾牌组件、冷却/进食互斥、关闭重锤后的两次独立弓箭和掩体阻箭。
+- 4.9 新增 11 项，验证真人出刀集火、感知/身份/开关/过期边界、实际护卫攻击、三档随队移动、诱饵/侧翼/弓手分工与连续射击、安全补给中的前排轮换、取消出刀、双伤员分配，以及队友进入拉弓射线后停射并在空隙恢复后命中。
+- 4.10 新增 10 项，验证真实俯冲接触预测、不同高度/方向的同刻砸击出手、移动靶、同向起飞后的两种槽位顺序分散、伤员及动态障碍取消、不同对手/难度/能力边界，以及阻塞/危险落点/未加载区块。
+- 4.11 新增 6 项，验证 8–10 地面近战、轻度受伤实际进食、砸击后的实际地面追击、连续真实伤害下的紧急起飞、受阻团队站位后实际近战和空补给后恢复追击。
+
+- 4.12 新增无卓越前线时的真实近战回归；安装 0.8.9.1 后另跑 14 项真实枪械检查，包含实际伤害、有限弹药、原版换弹/拉栓、按距离换枪、失去视线、友军射线、恢复物品互斥、RPG 对实际坦克的伤害、运行时数据覆盖、多人弹丸预算与低难度转身限制。运行方式见 `SUPERB_WARFARE.md`，实际结果见 `AI_HARDNESS_PROGRESS.md`。
