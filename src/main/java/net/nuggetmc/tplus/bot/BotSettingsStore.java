@@ -25,6 +25,7 @@ public final class BotSettingsStore {
     public void load() throws IOException {
         if (!Files.isRegularFile(file)) { save(); return; }
         CompoundTag root = SnbtConfig.read(file);
+        var logConfig = net.nuggetmc.tplus.api.agent.legacyagent.skill.BattleLog.Config.read(root.getCompound("BattleLog"));
         SkillSettings checked = new SkillSettings();
         checked.load(root.getCompound("Skills"));
         EnumTargetGoal goal = root.contains("Goal") ? EnumTargetGoal.valueOf(root.getString("Goal")) : agent.getTargetType();
@@ -45,6 +46,7 @@ public final class BotSettingsStore {
         agent.getSkills().clear();
         agent.getSkillSettings().load(checked.save());
         agent.setTargetType(goal);
+        agent.getSkills().battleLog().configure(logConfig);
         agent.setRegion(bounds, wx, wy, wz);
         manager.setMobTarget(root.getBoolean("MobTarget"));
         manager.setAddToPlayerList(root.getBoolean("AddPlayerList"));
@@ -61,6 +63,7 @@ public final class BotSettingsStore {
         CompoundTag root = new CompoundTag();
         root.putInt("Version", 1);
         root.put("Skills", agent.getSkillSettings().save());
+        root.put("BattleLog", agent.getSkills().battleLog().config().save());
         root.putString("Goal", agent.getTargetType().name());
         root.putBoolean("MobTarget", manager.isMobTarget());
         root.putBoolean("AddPlayerList", manager.addToPlayerList());

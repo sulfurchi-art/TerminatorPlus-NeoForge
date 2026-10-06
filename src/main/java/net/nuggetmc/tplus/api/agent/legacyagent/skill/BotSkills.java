@@ -35,6 +35,8 @@ public class BotSkills {
     private final net.nuggetmc.tplus.compat.WarfareSupport warfare;
     private final WarfareTactics ordnance;
     private final MissileDefense missiles;
+    private final BattleLog battleLog;
+    public BattleLog battleLog() { return battleLog; }
 
     public BotSkills(BotManager manager, SkillSettings settings) {
         this.manager = manager;
@@ -53,6 +55,7 @@ public class BotSkills {
         this.warfare = new net.nuggetmc.tplus.compat.WarfareSupport(this);
         this.ordnance = new WarfareTactics(this);
         this.missiles = new MissileDefense(this);
+        this.battleLog = new BattleLog(this, manager);
     }
 
     public SkillSettings settings() {
@@ -80,6 +83,7 @@ public class BotSkills {
     }
 
     public void forget(Terminator bot) {
+        if (bot instanceof Bot b) battleLog.forget(b);
         if (bot instanceof Bot b) missiles.forget(b);
         if (bot instanceof Bot b) ordnance.forget(b);
         warfare.forget(bot);
@@ -360,12 +364,12 @@ public class BotSkills {
         if (target == null && limitedPerception(bot) && mem.lastSeen != null
                 && (now - mem.lastSeenTick < 100 || now < mem.recoverySearchUntil)) {
             Vec3 delta = mem.lastSeen.subtract(bot.getLocation()).multiply(1, 0, 1);
-            bot.faceLocation(mem.lastSeen);
-            if (delta.lengthSqr() > 2 && bot.isBotOnGround()) searchLastSeen(bot, mem, now);
-            else if (bot.tickDelay(10)) bot.setLook(bot.getEntity().getYRot() + 30, 0);
-            return true;
+            if (delta.lengthSqr() > 2 && bot.isBotOnGround()) {
+                bot.faceLocation(mem.lastSeen);
+                searchLastSeen(bot, mem, now);
+                return true;
+            }
         }
-        if (target == null && limitedPerception(bot) && bot.tickDelay(10)) bot.setLook(bot.getEntity().getYRot() + 30, 0);
 
         return false;
     }

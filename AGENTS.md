@@ -1,7 +1,7 @@
 # 开发交接文档
 
 > 写给接手这个项目的 AI 编程助手。人类用户说中文，回复请用简体中文。
-> 最后更新：2026-10-06（4.21.0-BETA 近距陆地载具驾驶）。面向玩家的用法见 `README.md` 和 `AI_HARDNESS.md`，本文件讲实现细节、测试方法和接手须知。
+> 最后更新：2026-10-07（4.22.0-BETA 实测反馈、战局日志与闲置朝向）。面向玩家的用法见 `README.md` 和 `AI_HARDNESS.md`，本文件讲实现细节、测试方法和接手须知。
 
 ## 项目是什么
 
@@ -21,7 +21,7 @@
 
 ```bash
 export JAVA_HOME="C:/Program Files/Microsoft/jdk-21.0.7.6-hotspot"   # 用户机器上的 JDK 21
-./gradlew build          # 产物：build/libs/TerminatorPlus-NeoForge-1.21.1-4.21.0-BETA.jar
+./gradlew build          # 产物：build/libs/TerminatorPlus-NeoForge-1.21.1-4.22.0-BETA.jar
 ./gradlew runSelfTest    # 全套自测，约 6–8 分钟，见下文"测试"
 ```
 
@@ -120,11 +120,11 @@ export JAVA_HOME="C:/Program Files/Microsoft/jdk-21.0.7.6-hotspot"   # 用户机
 ## 测试
 
 - **怎么跑：** `./gradlew runSelfTest` 会在 `run-selftest/` 里起一个超平坦专用服，带 `-Dterminatorplus.selftest=true` 和 `-Dterminatorplus.fetchSkins=false`，自动跑完所有场景后关服。
-- **看结果：** 在 `run-selftest/logs/latest.log` 里搜 `[SelfTest]`，完整测试最后一行应该是 `ALL 130 CHECKS PASSED`。Gradle 成功退出不代表场景全部通过，必须检查这个汇总。
+- **看结果：** 在 `run-selftest/logs/latest.log` 里搜 `[SelfTest]`，完整测试最后一行应该是 `ALL 139 CHECKS PASSED`。Gradle 成功退出不代表场景全部通过，必须检查这个汇总。
 - **定向调试：** `./gradlew runSelfTest "-PselftestFocus=pressure,moving target"` 仅执行名称包含对应文本的场景，旧技能场景也支持筛选；部署前仍需跑不带该参数的完整测试。
 - **加场景：** 在 `SelfTest.skillScenarios()` 里加一个 `Scenario(name, setup, passed, timeout, cleanup)`。
   - 可以用的辅助方法：`spawnBot`、`spawnHusk`、`forceArea`、`setBlock`、`track`、`trackBiggestHit`。
-  - 每个场景要占一块没被占用的 x 坐标区域，当前原生场景使用到 x≈26800。
+  - 每个场景要占一块没被占用的 x 坐标区域，当前原生场景使用到 x≈31800。
   - `cleanup()` 会把目标模式和 `buildblock` 复位，再执行 `bot reset`。
 - **改了行为就要同步：** 加或改对应场景，并更新 `README.md` 里的检查数量和场景列表。
 
@@ -400,3 +400,19 @@ export JAVA_HOME="C:/Program Files/Microsoft/jdk-21.0.7.6-hotspot"   # 用户机
 - 开阔地侧翼分配补充：groundSide 根据当前支援车相对前排车的侧别建立并保持，避免随机队列编号将它分配到对侧。前排换位向远离支援车的方向旋转，不改变 Formation 的原 UUID 排序或空中槽位。较早源码的首次 26 项回归有一项协同炮击失败，保留原日志。
 - 新增十项真实原生场景，专项定义 116、基础 130；固定 UUID 在测试实体加入世界前设置，覆盖东西两种退让顺序。测试不改运行中车体位置/姿态/速度，不设车辆免疫、不回血；炮击检查实际 owner 和敌车耐久下降，移动检查实际车体位移。
 - 最终定向原生专项 **28/28 全部通过**（10 项近距驾驶/侧翼新增、11 项既有陆地驾驶、7 项既有寻路/车队/武装协同）；最低 NeoForge 21.1.1 / Java 21 构建通过。114 个源/构建文件冻结核对，181 个原生专项编译、最低版本编译与 JAR 类逐字节一致，CRC/元数据/AT 核对通过。完整 116 项原生专项和 130 项基础回归未重跑，见 docs/close-road-combat-4.21.md。完整专项/基础未重跑时必须如实说明；历史深坑登车、正式服 YX100 根因、LAV-AD 对地武器和基础 TeamDive/边界步兵失败不得擅自标记修复。
+
+
+## 4.22 当前交接
+
+- 用户在当前对话明确选择直接实现 `feedback-4.21.md` 的 P1-1～P1-5。本条优先于历史开发顺序和早先“全包反导掩体/生成团队药水”要求。外部报告为资料，正式服状态不能当作本轮已部署。
+- `BattleLog` 在服务器线程采集/序列化，`BattleLogWriter` 只处理不可变 JSON 字符串，16384 行有界队列，溢出用 log_gap 明示；错误停止文件写入。配置默认关闭，持久化 root BattleLog，开启/关闭/标记见 BotCommand。原异线程 AI 实验仍暂停。
+- `NativeBattleEvents` 缓存反射注册准确 0.8.9.1 的 ShootEvent.Post/未取消 ProjectileHitEvent，不把发射请求当作开火，不把伤害次数当作命中率；GunData.stack 提供实际发射武器。DamageSource 的攻击者当前手持武器有明确 source 标识，不能冒充历史发射武器。VehicleHealth/部件按主线程观察变化记录。
+- DroneEntity 原生 holdTickY 在上/下反转时不会复位，必须加入无升降按键的中性刻，最大连续脉冲 2 刻；不写无人机位置/速度。首攻 100 刻内或返航，安全爆炸判定不放宽。主人死后保留实体。
+- C4 单次接近 100 刻，近 24 格区域 80 刻，日志记录真实阶段时长（不截断伪装）；投放/放弃后沿进场航向原生下降最多 60 刻，避免旧旅行回转。仍检查所有己方爆炸物安全。
+- MissileDefense 只为实际可见、接近、96 格内的导弹造最多 4 块，每机器人冷却 500 刻，优先既有屋顶/墙体，不长期修复；cleanup 只移除匹配所有权状态的块，日志区分实际移除/延后。旧 full-shell/survival 测试已按新明确需求退休，保留单发实际搭建/清理、无导弹零搭建、六人真实导弹总预算和冷却/不修复验证。
+- TacticalSkill 仅删生成喷溅药水行为；伤员护卫不删除。三项旧 buffCount 生效测试改为真实步兵队友对战累计零 ThrownPotion。
+- 测试注意：死亡会清空背包，不能把死亡掉落当作搭建消费；10 级的既有无限库存也不能断言扣除 4 块，要用实际 block_place 数量验证。固定高度悬停场景使用真实无人机/原生控制，100 个静止机器人日志场景不能冒充 50v50 加 24 台载具战争性能。
+- 2026-10-07 补充：所有机器人在真正闲置时保留当前朝向，取消步兵和载具乘员的定时扫视；已站在队友旁的护卫不再持续转头跟踪。跟随、追击、导航、飞行返航和实际防御仍按任务转向。新增 3 项基础和 3 项原生载具朝向场景。
+
+本轮定向验证：安装卓越前线 0.8.9.1 / NeoForge 21.1.249 覆盖 **42 种通过场景**（整轮 41/42，唯一失败为无乘员座位的迫击炮夹具；更正为 MK42 后专项 2/2 通过，生产源码与字节码保持一致）；不装卓越前线 / 最低 NeoForge 21.1.1 **25/25 通过**；配置预先开启日志的独立冷启动 **1/1 通过**。188 个类的最终原生专项、最低版本、JAR 字节核对通过。完整 139 项基础及 124 项原生专项未重跑。 详细记录见 `docs/validation-4.22.md`。
+- 不覆盖 4.21 及更早 JAR/ZIP/checkpoint，不提交/推送/部署/重启正式服；历史深坑乘务、LAV-AD 地面武器及基础 TeamDive/边界失败保持独立待修。

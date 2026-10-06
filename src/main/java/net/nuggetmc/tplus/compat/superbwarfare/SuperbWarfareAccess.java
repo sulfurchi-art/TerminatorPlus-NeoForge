@@ -98,6 +98,7 @@ public final class SuperbWarfareAccess implements WarfareAccess {
         bind("setWeaponIndex", int.class, int.class); bind("getShootPos", Entity.class, float.class);
         bind("getShootVec", Entity.class, float.class); bind("vehicleShoot", LivingEntity.class, UUID.class, Vec3.class);
         bind("setEnergy", int.class);
+        for (String name : List.of("getTurretHealth", "getLeftWheelHealth", "getRightWheelHealth", "getMainEngineHealth", "getSubEngineHealth")) bind(name);
         bind("getCollisionOBBInfo");
         Class<?> obbInfo = Class.forName(ROOT + "data.vehicle.subdata.OBBInfo");
         footprintSize = obbInfo.getMethod("getSize"); footprintCenter = obbInfo.getMethod("getPosition");
@@ -269,6 +270,11 @@ public final class SuperbWarfareAccess implements WarfareAccess {
         @Override public boolean wreck() { return (boolean) v("isWreck"); }
         @Override public float health() { return ((Number) v("getHealth")).floatValue(); }
         @Override public float maxHealth() { return ((Number) v("getMaxHealth")).floatValue(); }
+        @Override public Map<String, Float> partHealth() {
+            Map<String, Float> out = new java.util.LinkedHashMap<>();
+            for (String part : List.of("Turret", "LeftWheel", "RightWheel", "MainEngine", "SubEngine")) out.put(part, ((Number) v("get" + part + "Health")).floatValue());
+            return out;
+        }
         @Override public int energy() { return (int) v("getEnergy"); }
         @Override public int maxEnergy() { return (int) v("getMaxEnergy"); }
         @Override public void energy(int value) { v("setEnergy", value); }

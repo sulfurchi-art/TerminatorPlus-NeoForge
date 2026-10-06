@@ -69,6 +69,7 @@ public final class WarfareSupport {
         try {
             access = (WarfareAccess) Class.forName("net.nuggetmc.tplus.compat.superbwarfare.SuperbWarfareAccess")
                     .getConstructor().newInstance();
+            net.nuggetmc.tplus.compat.superbwarfare.NativeBattleEvents.register();
             status = "SBW 0.8.9.1 ready";
             LOGGER.info("TerminatorPlus {}", status);
         } catch (ReflectiveOperationException | LinkageError | RuntimeException e) { disable(e); }
@@ -325,6 +326,7 @@ public final class WarfareSupport {
             if (chosen == null) { release(bot); return false; }
             if (s.held == null || s.held.stack() != chosen.stack()) {
                 if (!hold(bot, s, chosen, now)) return false;
+                skills.battleLog().event("weapons", "weapon_select", bot, "weapon", net.nuggetmc.tplus.api.agent.legacyagent.skill.BattleLog.itemId(chosen.stack()), "reason", "available_ammo_range_damage_score");
                 s.nextShot = Math.max(s.nextShot, now + 4 + (10 - difficulty) * 2);
             }
         }

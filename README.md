@@ -13,9 +13,13 @@
 ./gradlew build
 ```
 
-产物在 `build/libs/TerminatorPlus-NeoForge-1.21.1-4.21.0-BETA.jar`，放进服务器（或客户端）的 `mods/` 文件夹。
+产物在 `build/libs/TerminatorPlus-NeoForge-1.21.1-4.22.0-BETA.jar`，放进服务器（或客户端）的 `mods/` 文件夹。
 
-当前 4.21 改善近距陆地载具交战：狭路不强行掉头，使用原生倒车拉距；侧移不适合车身时沿道路推进或后撤；友军单车道会车由一辆车退到宽处、侧向让行，等另一辆通过后恢复行驶。沿用 4.20 C4 单次低空穿越、标枪反制与此前枪械/乘务组功能。用法见 [`SUPERB_WARFARE.md`](SUPERB_WARFARE.md)，实现与验证见 [近距驾驶记录](docs/close-road-combat-4.21.md)。
+当前 4.22 按反馈修正无人机升降和压制节奏、C4 单次进场后的限时离场、小规模低频反导掩体，并取消自动生成的团队喷溅药水。新增默认关闭的开发战局日志：`/bot log on|off|status|mark <文字>`。沿用 4.21 近距载具倒车、进攻与友军让行。详细说明见 [4.22 行为与日志](docs/battle-log-4.22.md) 和 [`SUPERB_WARFARE.md`](SUPERB_WARFARE.md)。
+
+2026-10-07 补充：所有机器人在真正闲置时保留当前朝向，取消步兵和载具乘员的定时扫视；已站在队友旁的护卫不再持续转头跟踪。跟随、追击、导航、飞行返航和实际防御仍按任务转向。新增 3 项基础和 3 项原生载具朝向场景。
+
+本轮定向验证：安装卓越前线 0.8.9.1 / NeoForge 21.1.249 覆盖 **42 种通过场景**（整轮 41/42，唯一失败为无乘员座位的迫击炮夹具；更正为 MK42 后专项 2/2 通过，生产源码与字节码保持一致）；不装卓越前线 / 最低 NeoForge 21.1.1 **25/25 通过**；配置预先开启日志的独立冷启动 **1/1 通过**。188 个类的最终原生专项、最低版本、JAR 字节核对通过。完整 139 项基础及 124 项原生专项未重跑。 详细记录见 [docs/validation-4.22.md](docs/validation-4.22.md)。
 
 ## 命令
 
@@ -28,6 +32,7 @@
 | `/bot multi <数量> <名字> [皮肤] [位置]` | | 批量生成，名字里的 `%` 会被替换成序号 |
 | `/bot give <物品>` | | 设置所有机器人的默认武器（决定攻击伤害） |
 | `/bot armor <none\|leather\|chain\|gold\|iron\|diamond\|netherite>` | | 给所有机器人穿盔甲 |
+| `/bot log on\|off\|status\|mark <文字>` | | 开发期战局 JSONL 日志，默认关闭，设置持久化 |
 | `/bot info <名字>` · `/bot count` · `/bot reset` | | 查看 / 计数 / 全部移除 |
 | `/bot settings setgoal <目标模式>` | | `nearestenemy`、`nearestvulnerableplayer`、`nearestplayer`、`nearesthostile`、`nearestraider`、`nearestmob`、`nearestbot`、`nearestbotdiffer`、`nearestbotdifferalpha`、`customlist`、`player`、`none` |
 | `/bot settings mobtarget <true\|false>` | | 是否允许怪物以机器人为目标 |

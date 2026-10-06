@@ -200,10 +200,15 @@ public class Bot extends ServerPlayer implements Terminator {
     private void tickRecoveryItem() {
         if (!isConsuming()) return;
         if (--consumableTicks > 0) return;
+        ((LegacyAgent) agent).getSkills().battleLog().event("items", "consume", this, "item", net.nuggetmc.tplus.api.agent.legacyagent.skill.BattleLog.item(getMainHandItem()));
         ItemStack result = getMainHandItem().finishUsingItem(level(), this);
         getInventory().items.set(HAND_SLOT, result);
         cancelRecoveryItem();
     }
+
+    private String equipmentLabel = "custom";
+    public String equipmentLabel() { return equipmentLabel; }
+    public void equipmentLabel(String value) { equipmentLabel = value; }
 
     public void prepareEquipmentPreset() {
         ((LegacyAgent) agent).getSkills().ordnance().cancel(this);
@@ -833,6 +838,7 @@ public class Bot extends ServerPlayer implements Terminator {
         glideTicks = 0;
         fallDistance = 0;
         startFallFlying();
+        ((LegacyAgent) agent).getSkills().battleLog().event("items", "elytra_takeoff", this, "reason", ((LegacyAgent) agent).getSkills().memory(this).getFlightPlan().name());
         return true;
     }
 
@@ -925,6 +931,7 @@ public class Bot extends ServerPlayer implements Terminator {
         pearl.setItem(stack.copyWithCount(1));
         pearl.shootFromRotation(this, pitch, yaw, 0.0F, 1.5F, 1.0F);
         level().addFreshEntity(pearl);
+        ((LegacyAgent) agent).getSkills().battleLog().event("items", "pearl", this, "entity", pearl.getUUID().toString());
         level().playSound(null, getX(), getY(), getZ(), SoundEvents.ENDER_PEARL_THROW, SoundSource.NEUTRAL, 0.5F,
                 0.4F / (random.nextFloat() * 0.4F + 0.8F));
 
@@ -1533,12 +1540,15 @@ public class Bot extends ServerPlayer implements Terminator {
 
     @Override
     public void die(DamageSource damageSource) {
+        var log = ((LegacyAgent) agent).getSkills().battleLog();
+        var context = log.deathContext(this, damageSource);
         stopGliding();
 
         super.die(damageSource);
 
         // the death can be cancelled by other mods (LivingDeathEvent)
         if (!isAlive()) {
+            log.death(this, damageSource, context);
             this.dieCheck();
         }
     }
@@ -1711,7 +1721,8 @@ public class Bot extends ServerPlayer implements Terminator {
     }
 
     @Override
-    public void attemptBlockPlace(BlockPos loc, Block type, boolean down) {
+    public void attemptBlockPlace(BlockPos loc, Block type, boolean down) { attemptBlockPlace(loc, type, down, down ? "build_route" : "legacy_build"); }
+    public void attemptBlockPlace(BlockPos loc, Block type, boolean down, String reason) {
         if (down) {
             look(Direction.DOWN);
         } else {
@@ -1725,6 +1736,7 @@ public class Bot extends ServerPlayer implements Terminator {
 
         if (!LegacyMats.isSolid(world.getBlockState(loc).getBlock())) {
             world.setBlockAndUpdate(loc, type.defaultBlockState());
+            ((LegacyAgent) agent).getSkills().battleLog().event("items", "block_place", this, "reason", reason, "block", net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(type).toString(), "blockPos", java.util.List.of(loc.getX(), loc.getY(), loc.getZ()));
             world.playSound(null, loc, SoundEvents.STONE_PLACE, SoundSource.BLOCKS, 1, 1);
         }
     }

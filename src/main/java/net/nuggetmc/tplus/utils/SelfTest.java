@@ -762,6 +762,8 @@ public final class SelfTest {
         }, () -> immortal[0].getAliveTicks() > 115 && immortal[0].isAlive()
                 && immortal[0].countItem(Items.TOTEM_OF_UNDYING) == 0 && immortal[0].getOffhandItem().isEmpty(), 200, true));
 
+        list.addAll(idle422Scenarios(y));
+        list.addAll(battleLogScenarios(y));
         list.addAll(hardnessScenarios(y));
         list.addAll(warfareScenarios(y));
         return list;
@@ -999,6 +1001,8 @@ public final class SelfTest {
         list.addAll(warfareGroundScenarios(y));
         list.addAll(warfareCloseRoadScenarios(y));
         list.addAll(warfareMissileScenarios(y));
+        list.addAll(warfareIdle422Scenarios(y));
+        list.addAll(warfare422Scenarios(y));
         return list;
     }
 
@@ -1028,6 +1032,262 @@ public final class SelfTest {
         catch (ReflectiveOperationException e) { throw new IllegalStateException(e); }
         spawned.add(emitted[0]); return emitted[0];
     }
+    private List<com.google.gson.JsonObject> battleRows(java.nio.file.Path file) {
+        if (file == null || !java.nio.file.Files.isRegularFile(file)) return List.of();
+        try {
+            String text = java.nio.file.Files.readString(file);
+            // Live buffered output may end halfway through a line. Parse only completed JSONL records.
+            int lastLine = text.lastIndexOf('\n');
+            if (lastLine < 0) return List.of();
+            return text.substring(0, lastLine + 1).lines().filter(l -> !l.isBlank()).map(l -> com.google.gson.JsonParser.parseString(l).getAsJsonObject()).toList();
+        }
+        catch (java.io.IOException e) { throw new IllegalStateException(e); }
+    }
+    private static float[] orientation(Entity e) {
+        return e instanceof LivingEntity l ? new float[]{e.getYRot(), e.getXRot(), l.yHeadRot, l.yBodyRot} : new float[]{e.getYRot(), e.getXRot()};
+    }
+    private static boolean sameOrientation(Entity e, float[] expected) {
+        float[] actual = orientation(e);
+        for (int i = 0; i < actual.length; i++) if (Math.abs(net.minecraft.util.Mth.wrapDegrees(actual[i] - expected[i])) > 0.01) return false;
+        return true;
+    }
+    private List<Scenario> idle422Scenarios(int y) {
+        List<Scenario> list = new ArrayList<>();
+        for (boolean none : new boolean[]{true, false}) {
+            List<Bot> units = new ArrayList<>(); java.util.Map<Entity, float[]> facing = new java.util.HashMap<>(); boolean[] stable = {true};
+            list.add(new Scenario("idle 4.22 infantry levels one through ten preserve yaw pitch head and body with " + (none ? "goal none" : "no visible hostile"), () -> {
+                forceArea(31000, -10, 31100, 10); run("bot settings setgoal " + (none ? "none" : "nearesthostile"));
+                for (int level = 1; level <= 10; level++) {
+                    Bot b = spawnBot("IdleLevel" + level, 31005.5 + level * 6, y, 0.5); b.setHardnessOverride(level); b.profileAbilities().put("teamwork", false);
+                    b.setLook(23 + level * 7, -12 + level); units.add(b);
+                }
+                track(() -> { for (Bot b : units) { if (b.getAliveTicks() == 40) facing.put(b, orientation(b));
+                    if (b.getAliveTicks() > 40) stable[0] &= sameOrientation(b, facing.get(b)) && legacy().getSkills().currentTarget(b) == null; } });
+            }, () -> units.getFirst().getAliveTicks() >= 160 && stable[0] && units.stream().allMatch(Bot::isAlive), 180, true));
+        }
+        Bot[] escort = {null}; ServerPlayer[] ally = {null}; float[][] facing = {null}; boolean[] stable = {true};
+        list.add(new Scenario("idle 4.22 nearby healthy escort does not track a moving teammate with its head", () -> {
+            cooperationArena(31200, -8, 31220, 8, y); run("bot settings setgoal nearestenemy");
+            escort[0] = cooperationBot("StillEscort", 31205.5, y, 0.5); escort[0].setLook(0, 0);
+            ally[0] = spawnHuman("NearbyAlly", 31205.5, y, 3.5); PlayerTeam team = testTeam("still_escort", escort[0]); server.getScoreboard().addPlayerToTeam(ally[0].getScoreboardName(), team);
+            track(() -> { int age = escort[0].getAliveTicks(); if (age == 40) facing[0] = orientation(escort[0]);
+                if (age > 40) { double angle = age * 0.08; ally[0].setPos(31205.5 + Math.sin(angle), y, 2.5 + Math.cos(angle) * 0.5);
+                    stable[0] &= sameOrientation(escort[0], facing[0]) && escort[0].position().distanceTo(new Vec3(31205.5, y, 0.5)) < 0.1; } });
+        }, () -> escort[0].getAliveTicks() >= 160 && stable[0] && legacy().getSkills().memory(escort[0]).getGuardedAlly() == ally[0].getId(), 180, true));
+        return list;
+    }
+
+    private List<Scenario> battleLogScenarios(int y) {
+        List<Scenario> list = new ArrayList<>(); var log = legacy().getSkills().battleLog();
+        boolean[] disabled = {false};
+        list.add(new Scenario("battle log 4.22 default off and validated category config round trip", () -> {
+            disabled[0] = !log.enabled() && log.path() == null;
+            var config = net.nuggetmc.tplus.api.agent.legacyagent.skill.BattleLog.Config.read(new net.minecraft.nbt.CompoundTag());
+            disabled[0] &= !config.enabled() && config.snapshotTicks() == 40 && config.categories().contains("damage");
+            disabled[0] &= net.nuggetmc.tplus.api.agent.legacyagent.skill.BattleLog.Config.read(config.save()).equals(config);
+            var persisted = config.save(); persisted.putInt("SnapshotTicks", 60); persisted.getCompound("Categories").putBoolean("damage", false);
+            var alternate = net.nuggetmc.tplus.api.agent.legacyagent.skill.BattleLog.Config.read(persisted); log.configure(alternate);
+            try { TerminatorPlus.getManager().saveSettings(); TerminatorPlus.getManager().reloadSettings(); disabled[0] &= log.config().equals(alternate); }
+            catch (java.io.IOException e) { throw new IllegalStateException(e); }
+            log.configure(config); TerminatorPlus.getManager().saveSettings();
+            net.minecraft.nbt.CompoundTag bad = config.save(); bad.putInt("SnapshotTicks", 0);
+            try { net.nuggetmc.tplus.api.agent.legacyagent.skill.BattleLog.Config.read(bad); disabled[0] = false; } catch (IllegalArgumentException expected) {}
+        }, () -> disabled[0], 10, true));
+        Bot[] victim = {null}, killer = {null}; java.nio.file.Path[] file = {null}; boolean[] done = {false};
+        list.add(new Scenario("battle log 4.22 real damage totem death target match summary and escaped marks", () -> {
+            run("bot settings setgoal none"); run("bot log on"); file[0] = log.path();
+            scenarioHooks.add(() -> log.toggle(false));
+            forceArea(29100, -5, 29120, 5); victim[0] = spawnBot("LogVictim", 29104.5, y, 0.5); killer[0] = spawnBot("LogKiller", 29112.5, y, 0.5);
+            victim[0].profileAbilities().put("teamwork", false); killer[0].profileAbilities().put("teamwork", false);
+            victim[0].setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(Items.TOTEM_OF_UNDYING));
+            victim[0].profileAbilities().put("totem", false);
+            log.mark("quote\" newline\n中文"); run("bot settings setgoal nearestbot");
+            track(() -> {
+                int age = victim[0].getAliveTicks();
+                if (age == 80) victim[0].hurt(level.damageSources().playerAttack(killer[0]), 100);
+                if (age == 120) { victim[0].invulnerableTime = 0; victim[0].hurt(level.damageSources().playerAttack(killer[0]), 100); run("bot settings setgoal none"); run("bot log off"); done[0] = true; }
+            });
+        }, () -> {
+            var rows = battleRows(file[0]); var types = rows.stream().map(o -> o.get("type").getAsString()).collect(java.util.stream.Collectors.toSet());
+            return done[0] && !victim[0].isAlive() && types.containsAll(List.of("spawn", "target", "damage", "totem", "death", "mark", "match_start", "match_end", "summary", "snap")) &&
+                    rows.stream().filter(o -> o.get("type").getAsString().equals("mark")).anyMatch(o -> o.get("text").getAsString().equals("quote\" newline\n中文"));
+        }, 200, true));
+        net.nuggetmc.tplus.utils.BattleLogWriter[] sink = {null}; java.nio.file.Path[] pressureFile = {null}; long[] accepted = {0}, offerNanos = {0};
+        list.add(new Scenario("battle log 4.22 bounded queue pressure preserves accepted lines and explicitly reports loss", () -> {
+            pressureFile[0] = java.nio.file.Path.of("logs/terminatorplus/pressure-" + java.util.UUID.randomUUID() + ".jsonl").toAbsolutePath();
+            sink[0] = new net.nuggetmc.tplus.utils.BattleLogWriter(pressureFile[0], 8); scenarioHooks.add(() -> sink[0].close());
+            long begin = System.nanoTime();
+            for (int i = 0; i < 50000; i++) if (sink[0].offer("{\"type\":\"pressure\",\"n\":" + i + "}")) accepted[0]++;
+            offerNanos[0] = System.nanoTime() - begin; sink[0].close();
+            LOGGER.info("[SelfTest] BattleLog pressure offered=50000 accepted={} dropped={} producerMillis={}", accepted[0], sink[0].dropped(), offerNanos[0] / 1000000.0);
+        }, () -> sink[0].closed() && sink[0].error() == null && sink[0].written() == accepted[0] && accepted[0] + sink[0].dropped() == 50000 && sink[0].dropped() > 0 &&
+                battleRows(pressureFile[0]).stream().filter(o -> o.get("type").getAsString().equals("log_gap")).mapToLong(o -> o.get("dropped").getAsLong()).sum() == sink[0].dropped(), 100, true));
+        java.nio.file.Path[] filtered = {null}; Bot[] filteredBot = {null}; boolean[] filteredDone = {false};
+        list.add(new Scenario("battle log 4.22 damage and snap filters retain death history and summary counters", () -> {
+            run("bot settings setgoal none"); var config = log.config().save(); var cats = config.getCompound("Categories"); cats.putBoolean("damage", false); cats.putBoolean("snap", false);
+            config.putBoolean("Enabled", true); log.configure(net.nuggetmc.tplus.api.agent.legacyagent.skill.BattleLog.Config.read(config)); filtered[0] = log.path();
+            scenarioHooks.add(() -> { log.toggle(false); log.configure(net.nuggetmc.tplus.api.agent.legacyagent.skill.BattleLog.Config.read(new net.minecraft.nbt.CompoundTag())); });
+            forceArea(29140, -5, 29160, 5); filteredBot[0] = spawnBot("FilteredVictim", 29144.5, y, 0.5); filteredBot[0].profileAbilities().put("totem", false); filteredBot[0].getAttribute(Attributes.MAX_HEALTH).setBaseValue(300); filteredBot[0].setHealth(300); run("bot settings setgoal nearestbot");
+            track(() -> {
+                if (filteredBot[0].getAliveTicks() == 80) for (int i = 0; i < 150; i++) { filteredBot[0].invulnerableTime = 0; filteredBot[0].hurt(level.damageSources().generic(), 1); }
+                if (filteredBot[0].getAliveTicks() == 100) { filteredBot[0].invulnerableTime = 0; filteredBot[0].hurt(level.damageSources().generic(), 1000); run("bot settings setgoal none"); log.toggle(false); filteredDone[0] = true; }
+            });
+        }, () -> {
+            var rows = battleRows(filtered[0]);
+            return filteredDone[0] && rows.stream().noneMatch(o -> List.of("damage", "snap").contains(o.get("type").getAsString())) &&
+                    rows.stream().anyMatch(o -> o.get("type").getAsString().equals("summary")) && rows.stream().anyMatch(o -> o.get("type").getAsString().equals("death") && o.getAsJsonArray("recentDamage").size() == 128 && o.get("recentDamageTruncated").getAsBoolean());
+        }, 180, true));
+        net.nuggetmc.tplus.utils.BattleLogWriter[] broken = {null};
+        list.add(new Scenario("battle log 4.22 writer failure is isolated from the server thread", () -> {
+            try {
+                var parent = java.nio.file.Path.of("logs/terminatorplus/not-a-directory-" + java.util.UUID.randomUUID());
+                java.nio.file.Files.createDirectories(parent.getParent()); java.nio.file.Files.writeString(parent, "fixture");
+                broken[0] = new net.nuggetmc.tplus.utils.BattleLogWriter(parent.resolve("battle.jsonl")); broken[0].offer("{}");
+                scenarioHooks.add(() -> broken[0].close());
+            } catch (java.io.IOException e) { throw new IllegalStateException(e); }
+        }, () -> broken[0].closed() && broken[0].error() != null && !broken[0].offer("{}"), 100, true));
+        List<Bot> crowd = new ArrayList<>(); long[] benchmarkStarted = {0}, tickStarted = {0}; List<Double> offTicks = new ArrayList<>(), onTicks = new ArrayList<>();
+        boolean[] benchDone = {false}; java.nio.file.Path[] benchFile = {null};
+        list.add(new Scenario("battle log 4.22 one hundred idle bots collect snapshots without queue loss", () -> {
+            run("bot settings setgoal none"); forceArea(29800, -8, 29860, 48);
+            for (int i = 0; i < 100; i++) crowd.add(spawnBot("LogLoad" + i, 29804.5 + i % 10 * 4, y, i / 10 * 4 + 0.5));
+            benchmarkStarted[0] = server.getTickCount();
+            java.util.function.Consumer<net.neoforged.neoforge.event.tick.ServerTickEvent.Pre> before = event -> tickStarted[0] = System.nanoTime();
+            java.util.function.Consumer<net.neoforged.neoforge.event.tick.ServerTickEvent.Post> after = event -> {
+                long elapsed = server.getTickCount() - benchmarkStarted[0]; double ms = (System.nanoTime() - tickStarted[0]) / 1000000.0;
+                if (elapsed >= 80 && elapsed < 180) offTicks.add(ms);
+                if (elapsed >= 240 && elapsed < 340) onTicks.add(ms);
+            };
+            NeoForge.EVENT_BUS.addListener(net.neoforged.bus.api.EventPriority.HIGHEST, before); NeoForge.EVENT_BUS.addListener(net.neoforged.bus.api.EventPriority.LOWEST, after);
+            scenarioHooks.add(() -> { NeoForge.EVENT_BUS.unregister(before); NeoForge.EVENT_BUS.unregister(after); log.toggle(false); });
+            track(() -> {
+                long elapsed = server.getTickCount() - benchmarkStarted[0];
+                if (elapsed == 180) { log.toggle(true); benchFile[0] = log.path(); }
+                if (elapsed == 360) {
+                    LOGGER.info("[SelfTest] BattleLog 100 idle bots baselineAvgMs={} loggingAvgMs={} baselineP95Ms={} loggingP95Ms={} baselineMaxMs={} loggingMaxMs={} dropped={}",
+                            offTicks.stream().mapToDouble(Double::doubleValue).average().orElse(-1), onTicks.stream().mapToDouble(Double::doubleValue).average().orElse(-1),
+                            offTicks.stream().sorted().skip(95).findFirst().orElse(-1.0), onTicks.stream().sorted().skip(95).findFirst().orElse(-1.0), offTicks.stream().mapToDouble(Double::doubleValue).max().orElse(-1), onTicks.stream().mapToDouble(Double::doubleValue).max().orElse(-1), log.dropped());
+                    log.toggle(false); benchDone[0] = true;
+                }
+            });
+        }, () -> benchDone[0] && crowd.stream().allMatch(Bot::isAlive) && offTicks.size() == 100 && onTicks.size() == 100 &&
+                battleRows(benchFile[0]).stream().noneMatch(o -> o.get("type").getAsString().equals("log_gap")) &&
+                battleRows(benchFile[0]).stream().filter(o -> o.get("type").getAsString().equals("snap")).map(o -> o.get("bot").getAsString()).distinct().count() == 100, 440, true));
+        return list;
+    }
+    private List<Scenario> warfareIdle422Scenarios(int y) {
+        List<Scenario> list = new ArrayList<>(); var crew = legacy().getSkills().warfare().crew();
+        for (String type : new String[]{"m_1a_2", "ah_6", "mk_42"}) {
+            int x = type.equals("m_1a_2") ? 31400 : type.equals("ah_6") ? 31600 : 31800;
+            List<Bot> units = new ArrayList<>(); Entity[] body = {null}; java.util.Map<Entity, float[]> facing = new java.util.HashMap<>(); boolean[] stable = {true};
+            list.add(new Scenario("warfare idle 4.22 " + type + " crew and native body stop scanning while stationary", () -> {
+                warfareFlatArena(x, -20, x + 100, 20, y); run("bot settings setgoal none"); body[0] = spawnVehicle(type, x + 40.5, y, 0.5, -90);
+                int seats = Math.min(3, legacy().getSkills().warfare().vessel(body[0]).seats().size());
+                if (seats == 0) throw new IllegalStateException("Idle crew fixture has no native seat: " + type);
+                for (int i = 0; i < seats; i++) { Bot b = vehicleBot("IdleCrew" + i, 10, x + 40.5, y, 2.5 + i); units.add(b); }
+                testTeam("idle_crew", units.toArray(Bot[]::new));
+                for (int i = 0; i < units.size(); i++) crew.board(units.get(i), body[0], i);
+                track(() -> { int age = units.getFirst().getAliveTicks();
+                    if (age == 100) { facing.put(body[0], orientation(body[0])); units.forEach(b -> facing.put(b, orientation(b))); }
+                    if (age > 100) { stable[0] &= sameOrientation(body[0], facing.get(body[0]));
+                        for (Bot b : units) stable[0] &= b.getVehicle() == body[0] && sameOrientation(b, facing.get(b)); }
+                });
+            }, () -> units.getFirst().getAliveTicks() >= 220 && stable[0] && units.stream().allMatch(Bot::isAlive), 260, true));
+        }
+        return list;
+    }
+
+    private List<Scenario> warfare422Scenarios(int y) {
+        List<Scenario> list = new ArrayList<>(); var skills = legacy().getSkills(); var war = skills.warfare(); var tactics = skills.ordnance(); var log = skills.battleLog();
+        Bot[] operator = {null}; Entity[] aircraft = {null}; Vec3[] hoverGoal = {null}; double[] min = {Double.POSITIVE_INFINITY}, max = {Double.NEGATIVE_INFINITY}; int[] samples = {0};
+        list.add(new Scenario("warfare 4.22 drone native hover five seconds stays within half a block", () -> {
+            warfareFlatArena(29200, -15, 29300, 15, y); run("bot settings setgoal none");
+            operator[0] = ordnanceBot("StableDrone", 10, 29210.5, y, 0.5); giveDrone(operator[0], "grenade_40mm", 4); Husk target = spawnHusk(29254.5, y, 0.5, 1000, false);
+            legacy().setEnabled(false); scenarioHooks.add(() -> legacy().setEnabled(true));
+            track(() -> {
+                int age = operator[0].getAliveTicks();
+                if (age == 80) {
+                    tactics.tick(operator[0], target, server.getTickCount()); aircraft[0] = tactics.drone(operator[0]);
+                    if (aircraft[0] != null) { spawned.add(aircraft[0]); hoverGoal[0] = aircraft[0].position().add(0, 8, 0); }
+                }
+                if (aircraft[0] != null) {
+                    try {
+                        var states = tactics.getClass().getDeclaredField("states"); states.setAccessible(true); Object state = ((java.util.Map<?, ?>) states.get(tactics)).get(operator[0]);
+                        var pilot = tactics.getClass().getDeclaredMethod("pilotDrone", Bot.class, state.getClass(), Vec3.class); pilot.setAccessible(true); pilot.invoke(tactics, operator[0], state, hoverGoal[0]);
+                    } catch (ReflectiveOperationException e) { throw new IllegalStateException(e); }
+                    if (age >= 200 && age < 300) { min[0] = Math.min(min[0], aircraft[0].getY()); max[0] = Math.max(max[0], aircraft[0].getY()); samples[0]++; }
+                    if (age % 20 == 0) LOGGER.info("[SelfTest] Drone hover age={} y={} vy={} range={} samples={}", age, aircraft[0].getY(), aircraft[0].getDeltaMovement().y, max[0] - min[0], samples[0]);
+                }
+            });
+        }, () -> samples[0] >= 100 && aircraft[0].isAlive() && max[0] - min[0] <= 0.5 && Math.abs(aircraft[0].getY() - hoverGoal[0].y) <= 0.5, 340, true));
+        Bot[] bomber = {null}; java.nio.file.Path[] droneFile = {null}; java.util.Set<java.util.UUID> drops = new java.util.HashSet<>(); boolean[] finished = {false};
+        list.add(new Scenario("warfare 4.22 drone suppression attacks within five seconds and produces multiple native rounds in thirty seconds", () -> {
+            warfareFlatArena(29400, -20, 29530, 20, y); run("bot settings setgoal nearesthostile"); run("bot log on"); droneFile[0] = log.path(); scenarioHooks.add(() -> log.toggle(false));
+            bomber[0] = ordnanceBot("FastSuppressor", 10, 29410.5, y, 0.5); giveDrone(bomber[0], "grenade_40mm", 16); spawnHusk(29454.5, y, 0.5, 5000, false);
+            java.util.function.Consumer<net.neoforged.neoforge.event.entity.EntityJoinLevelEvent> listener = event -> { if (event.getEntity() instanceof net.minecraft.world.entity.projectile.Projectile p && p.getOwner() == bomber[0]) drops.add(p.getUUID()); };
+            NeoForge.EVENT_BUS.addListener(listener); scenarioHooks.add(() -> NeoForge.EVENT_BUS.unregister(listener));
+            track(() -> {
+                Entity d = tactics.drone(bomber[0]); if (d != null && !spawned.contains(d)) spawned.add(d);
+                if (bomber[0].getAliveTicks() == 620) { log.toggle(false); finished[0] = true; }
+            });
+        }, () -> {
+            var attacks = battleRows(droneFile[0]).stream().filter(o -> o.get("type").getAsString().equals("drone_attack")).toList();
+            return finished[0] && bomber[0].isAlive() && drops.size() >= 4 && attacks.size() >= 4 && attacks.stream().allMatch(o -> o.get("firstAttackLatencyTicks").getAsLong() <= 100);
+        }, 700, true));
+        Bot[] driver = {null}, gunner = {null}; Entity[] vehicle = {null}; java.nio.file.Path[] mountedFile = {null}; boolean[] shotDone = {false};
+        list.add(new Scenario("warfare 4.22 battle log records actual native seat firing and occupied vehicle snapshots", () -> {
+            warfareFlatArena(29600, -20, 29760, 20, y); run("bot settings setgoal nearesthostile"); run("bot log on"); mountedFile[0] = log.path(); scenarioHooks.add(() -> log.toggle(false));
+            driver[0] = vehicleBot("LoggedDriver", 10, 29610.5, y, 2.5); vehicle[0] = spawnVehicle("m_1a_2", 29612.5, y, 0.5, -90); war.crew().board(driver[0], vehicle[0], 0);
+            spawnHusk(29690.5, y, 0.5, 5000, false);
+            track(() -> { if (driver[0].getAliveTicks() == 200) { log.toggle(false); shotDone[0] = true; } });
+        }, () -> {
+            var rows = battleRows(mountedFile[0]); var types = rows.stream().map(o -> o.get("type").getAsString()).collect(java.util.stream.Collectors.toSet());
+            return shotDone[0] && types.containsAll(List.of("board_request", "board_ok", "fire", "vehicle_snap", "weapon_select", "nav")) && rows.stream().anyMatch(o -> o.get("type").getAsString().equals("fire") && o.has("vehicle")) && rows.stream().filter(o -> o.get("type").getAsString().equals("fire")).allMatch(o -> net.minecraft.resources.ResourceLocation.tryParse(o.get("weapon").getAsString()) != null);
+        }, 300, true));
+        Bot[] survivor = {null}, launcher = {null}; Entity[] first = {null}, second = {null}; int[] peak = {0}; boolean[] damagedBlock = {false}, noRepair = {true}; java.nio.file.Path[] defenseFile = {null}; boolean[] defenseDone = {false};
+        list.add(new Scenario("warfare 4.22 missile shelter has a twenty five second cooldown and never reinforces broken blocks", () -> {
+            warfareFlatArena(30000, -20, 30150, 20, y); run("bot settings setgoal none"); run("bot log on"); defenseFile[0] = log.path(); scenarioHooks.add(() -> log.toggle(false));
+            survivor[0] = missileBot("CooldownCover", 10, 30100.5, y, 0.5); survivor[0].giveItem(warfareItem("steel_block", 64)); survivor[0].setInvulnerable(true);
+            launcher[0] = infantry("RepeatedLauncher", 7, 30010.5, y, 0.5); launcher[0].profileAbilities().put("guns", false);
+            track(() -> {
+                int age = survivor[0].getAliveTicks();
+                if (age == 80) first[0] = fireJavelin(launcher[0], survivor[0], false);
+                peak[0] = Math.max(peak[0], skills.missiles().placed(survivor[0]));
+                if (!damagedBlock[0] && peak[0] >= 4) {
+                    for (BlockPos pos : BlockPos.betweenClosed(30097, y, -3, 30103, y + 3, 3)) if (level.getBlockState(pos).getBlock() == ((net.minecraft.world.item.BlockItem) warfareItem("steel_block", 1).getItem()).getBlock()) {
+                        skills.missiles().invalidate(net.minecraft.core.GlobalPos.of(level.dimension(), pos.immutable())); setBlock(pos.getX(), pos.getY(), pos.getZ(), Blocks.AIR.defaultBlockState()); damagedBlock[0] = true; break;
+                    }
+                }
+                if (age == 140) second[0] = fireJavelin(launcher[0], survivor[0], false);
+                if (damagedBlock[0]) noRepair[0] &= survivor[0].countItem(warfareItem("steel_block", 1).getItem()) == 64 && skills.missiles().placed(survivor[0]) <= 4;
+                if (age == 240) { log.toggle(false); defenseDone[0] = true; }
+            });
+        }, () -> defenseDone[0] && damagedBlock[0] && peak[0] == 4 && noRepair[0] && first[0].isRemoved() && second[0].isRemoved() &&
+                battleRows(defenseFile[0]).stream().filter(o -> o.get("type").getAsString().equals("shelter_start")).count() == 1 &&
+                battleRows(defenseFile[0]).stream().filter(o -> o.get("type").getAsString().equals("block_place") && o.get("reason").getAsString().equals("missile_shelter")).count() == 4, 300, true));
+        Bot[] covered = {null}, coverLauncher = {null}; Entity[] coverMissile = {null}; boolean[] seek = {false};
+        list.add(new Scenario("warfare 4.22 missile prefers reachable existing roof and wall over creating blocks", () -> {
+            warfareFlatArena(30300, -20, 30460, 20, y); run("bot settings setgoal none");
+            BlockState wall = ((net.minecraft.world.item.BlockItem) warfareItem("steel_block", 1).getItem()).getBlock().defaultBlockState();
+            for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++) for (int h = 0; h <= 2; h++)
+                if (h == 2 || Math.abs(dx) == 2 || Math.abs(dz) == 2) setBlock(30404 + dx, y + h, dz, wall);
+            setBlock(30404, y, -2, Blocks.AIR.defaultBlockState()); setBlock(30404, y + 1, -2, Blocks.AIR.defaultBlockState());
+            covered[0] = missileBot("NaturalCover", 10, 30400.5, y, 0.5); covered[0].giveItem(warfareItem("steel_block", 64)); covered[0].setInvulnerable(true);
+            coverLauncher[0] = infantry("CoverLauncher", 7, 30310.5, y, 0.5); coverLauncher[0].profileAbilities().put("guns", false);
+            track(() -> { if (covered[0].getAliveTicks() == 80) coverMissile[0] = fireJavelin(coverLauncher[0], covered[0], true); seek[0] |= war.describe(covered[0]).contains("SEEK_SHELTER"); });
+        }, () -> covered[0].getAliveTicks() > 180 && coverMissile[0].isRemoved() && seek[0] && skills.missiles().placed(covered[0]) == 0 && covered[0].countItem(warfareItem("steel_block", 1).getItem()) == 64, 260, true));
+        Bot[] deadOwner = {null}; Entity[] retained = {null}; long[] diedAt = {-1};
+        list.add(new Scenario("warfare 4.22 operator death releases remote controls while the native drone remains", () -> {
+            warfareFlatArena(30500, -15, 30600, 15, y); run("bot settings setgoal nearesthostile"); deadOwner[0] = ordnanceBot("DeadOperator", 10, 30510.5, y, 0.5);
+            giveDrone(deadOwner[0], "grenade_40mm", 4); spawnHusk(30554.5, y, 0.5, 5000, false);
+            track(() -> {
+                Entity d = tactics.drone(deadOwner[0]);
+                if (d != null && retained[0] == null) { retained[0] = d; spawned.add(d); deadOwner[0].invulnerableTime = 0; deadOwner[0].hurt(level.damageSources().genericKill(), 10000); diedAt[0] = server.getTickCount(); }
+            });
+        }, () -> diedAt[0] >= 0 && server.getTickCount() - diedAt[0] > 60 && !deadOwner[0].isAlive() && retained[0].isAlive() && !retained[0].isRemoved() && tactics.drone(deadOwner[0]) == null, 240, true));
+        return list;
+    }
+
     private List<Scenario> warfareMissileScenarios(int y) {
         List<Scenario> list = new ArrayList<>(); var skills = legacy().getSkills(); var defense = skills.missiles();
         Bot[] naked = {null}, baselineShooter = {null}; Entity[] baselineMissile = {null};
@@ -1037,60 +1297,25 @@ public final class SelfTest {
             baselineShooter[0] = infantry("BaselineLauncher", 7, 16980.5, y, 0.5); baselineShooter[0].profileAbilities().put("guns", false);
             track(() -> { if (naked[0].getAliveTicks() == 80) baselineMissile[0] = fireJavelin(baselineShooter[0], naked[0], false); });
         }, () -> baselineMissile[0] != null && !naked[0].isAlive(), 260, true));
+        // 4.22 retires the complete-shell/survival contract. Assert actual finite construction and cleanup instead.
         for (boolean top : new boolean[]{false, true}) {
             int x = top ? 17500 : 17200;
-            Bot[] protectedBot = {null}, shooter = {null}; Entity[] missile = {null}; boolean[] sealed = {false}, warning = {false}; int[] remaining = {128};
-            list.add(new Scenario("warfare missile " + (top ? "top attack" : "direct attack") + " native Javelin meets a complete finite steel shelter and bot survives", () -> {
+            Bot[] protectedBot = {null}, shooter = {null}; Entity[] missile = {null}; int[] peak = {0}, spent = {0}; boolean[] warned = {false}; long[] begun = {-1};
+            list.add(new Scenario("warfare 4.22 missile " + (top ? "top" : "direct") + " builds at most four actual blocks and clears after one missile", () -> {
                 warfareFlatArena(x - 40, -40, x + 150, 40, y); run("bot settings setgoal none");
-                protectedBot[0] = missileBot("Sheltered" + top, 9, x + 100.5, y, 0.5); protectedBot[0].giveItem(warfareItem("steel_block", 64)); protectedBot[0].giveItem(warfareItem("steel_block", 64));
-                shooter[0] = infantry("NativeLauncher" + top, 7, x + 10.5, y, 0.5); shooter[0].profileAbilities().put("guns", false);
-                java.util.function.Consumer<net.neoforged.neoforge.event.entity.living.LivingDamageEvent.Post> damageLog = event -> {
-                    if (event.getEntity() == protectedBot[0]) LOGGER.info("[SelfTest] Shelter actual damage={} source={} direct={} pos={} blocks={} hp={}", event.getNewDamage(), event.getSource().getMsgId(), event.getSource().getDirectEntity() == null ? null : event.getSource().getDirectEntity().position(), protectedBot[0].position(), defense.placed(protectedBot[0]), protectedBot[0].getHealth());
-                };
-                NeoForge.EVENT_BUS.addListener(damageLog); scenarioHooks.add(() -> NeoForge.EVENT_BUS.unregister(damageLog));
+                protectedBot[0] = missileBot("SmallShelter" + top, 9, x + 100.5, y, 0.5); protectedBot[0].giveItem(warfareItem("steel_block", 64));
+                shooter[0] = infantry("SmallLauncher" + top, 7, x + 10.5, y, 0.5); shooter[0].profileAbilities().put("guns", false);
                 track(() -> {
-                    if (protectedBot[0].getAliveTicks() == 80) missile[0] = fireJavelin(shooter[0], protectedBot[0], top);
-                    sealed[0] |= defense.enclosed(protectedBot[0], protectedBot[0].blockPosition());
-                    warning[0] |= skills.warfare().describe(protectedBot[0]).contains("missileAlert=INBOUND");
-                    remaining[0] = protectedBot[0].countItem(warfareItem("steel_block", 1).getItem());
-                    if (protectedBot[0].getAliveTicks() == 100) {
-                        List<BlockPos> missing = new ArrayList<>();
-                        for (int dy = 0; dy <= 3; dy++) for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++)
-                            if (dy <= 2 && (Math.abs(dx) == 2 || Math.abs(dz) == 2) || dy >= 2 && Math.abs(dx) <= 1 && Math.abs(dz) <= 1) {
-                                BlockPos p = new BlockPos(x + 100 + dx, y + dy, dz);
-                                if (!level.getBlockState(p).isCollisionShapeFullBlock(level, p)) missing.add(p);
-                            }
-                        LOGGER.info("[SelfTest] Missing shelter cells={} blocks={}", missing, defense.placed(protectedBot[0]));
-                    }
-                    if (protectedBot[0].getAliveTicks() % 5 == 0 && protectedBot[0].getAliveTicks() >= 80 && protectedBot[0].getAliveTicks() <= 130 || protectedBot[0].getAliveTicks() % 40 == 0) LOGGER.info("[SelfTest] Missile shelter top={} pos={} health={} sealed={} steel={} state={} missile={}", top, protectedBot[0].position(), protectedBot[0].getHealth(), sealed[0], remaining[0], skills.warfare().describe(protectedBot[0]), missile[0] == null ? null : missile[0].position());
+                    if (protectedBot[0].getAliveTicks() == 80) { begun[0] = server.getTickCount(); missile[0] = fireJavelin(shooter[0], protectedBot[0], top); }
+                    peak[0] = Math.max(peak[0], defense.placed(protectedBot[0])); if (protectedBot[0].isAlive()) spent[0] = Math.max(spent[0], 64 - protectedBot[0].countItem(warfareItem("steel_block", 1).getItem()));
+                    if (begun[0] >= 0 && (server.getTickCount() - begun[0]) % 20 == 0) LOGGER.info("[SelfTest] Small barrier top={} peak={} spentWhileAlive={} alive={} warned={}", top, peak[0], spent[0], protectedBot[0].isAlive(), warned[0]);
+                    warned[0] |= skills.warfare().describe(protectedBot[0]).contains("INBOUND");
                 });
-            }, () -> missile[0] != null && missile[0].isRemoved() && protectedBot[0].getAliveTicks() > 180 && protectedBot[0].isAlive()
-                    && protectedBot[0].getHealth() > 0 && warning[0] && sealed[0] && defense.placed(protectedBot[0]) >= 66 && remaining[0] == 128 - defense.placed(protectedBot[0]), 340, true));
+            }, () -> begun[0] >= 0 && server.getTickCount() - begun[0] > 100 && missile[0].isRemoved() && warned[0] && peak[0] > 0 && peak[0] <= 4 && spent[0] <= 4 &&
+                    java.util.stream.StreamSupport.stream(BlockPos.betweenClosed(x + 95, y, -5, x + 105, y + 4, 5).spliterator(), false).noneMatch(pos -> level.getBlockState(pos).getBlock() == ((net.minecraft.world.item.BlockItem) warfareItem("steel_block", 1).getItem()).getBlock()), 300, true));
         }
-        Bot[] houseBot = {null}, houseShooter = {null}; Entity[] houseMissile = {null}; boolean[] found = {false}, houseClosed = {false}; int[] initialHouseCost = {-1};
-        list.add(new Scenario("warfare missile nearby enclosed shelter is reached and its entrance sealed against top attack", () -> {
-            warfareFlatArena(17750, -40, 17930, 40, y); run("bot settings setgoal none");
-            BlockState steel = ((net.minecraft.world.item.BlockItem) warfareItem("steel_block", 1).getItem()).getBlock().defaultBlockState();
-            for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++) for (int h = 0; h <= 2; h++)
-                if (h == 2 || Math.abs(dx) == 2 || Math.abs(dz) == 2) setBlock(17854 + dx, y + h, dz, steel);
-            setBlock(17852, y, 0, Blocks.AIR.defaultBlockState()); setBlock(17852, y + 1, 0, Blocks.AIR.defaultBlockState());
-            houseBot[0] = missileBot("NearbyShelter", 9, 17850.5, y, 0.5); houseBot[0].giveItem(warfareItem("steel_block", 64)); houseBot[0].giveItem(warfareItem("steel_block", 64));
-            houseShooter[0] = infantry("HouseLauncher", 7, 17780.5, y, 0.5); houseShooter[0].profileAbilities().put("guns", false);
-            track(() -> {
-                if (houseBot[0].getAliveTicks() == 80) {
-                    var sound = net.minecraft.core.registries.BuiltInRegistries.SOUND_EVENT.get(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("superbwarfare", "locked_warning"));
-                    level.playSound(null, houseBot[0].getOnPos(), sound, net.minecraft.sounds.SoundSource.PLAYERS, 2, 1);
-                    houseMissile[0] = fireJavelin(houseShooter[0], houseBot[0], true);
-                }
-                found[0] |= skills.warfare().describe(houseBot[0]).contains("SEEK_SHELTER");
-                if (!houseClosed[0] && houseBot[0].getX() > 17854 && defense.enclosed(houseBot[0], houseBot[0].blockPosition())) { houseClosed[0] = true; initialHouseCost[0] = defense.placed(houseBot[0]); }
-                if (houseBot[0].getAliveTicks() % 40 == 0) LOGGER.info("[SelfTest] House shelter pos={} health={} state={} found={} closed={}", houseBot[0].position(), houseBot[0].getHealth(), skills.warfare().describe(houseBot[0]), found[0], houseClosed[0]);
-            });
-        }, () -> houseMissile[0] != null && houseMissile[0].isRemoved() && houseBot[0].getAliveTicks() > 180 && houseBot[0].isAlive()
-                && found[0] && houseClosed[0] && initialHouseCost[0] <= 20
-                && houseBot[0].countItem(warfareItem("steel_block", 1).getItem()) == 128 - defense.placed(houseBot[0]), 340, true));
         Bot[] scoped = {null}, observer = {null}; ItemStack[] scope = {null}; boolean[] aimed = {false}, released = {false}, unscoped = {false};
-        list.add(new Scenario("warfare missile scoped launcher is an aim warning and cancellation clears temporary shelter", () -> {
+        list.add(new Scenario("warfare 4.22 missile scoped aim and lock sounds never build a shelter", () -> {
             warfareFlatArena(18000, -40, 18150, 40, y); run("bot settings setgoal none");
             observer[0] = missileBot("AimWarning", 9, 18100.5, y, 0.5); observer[0].giveItem(warfareItem("steel_block", 64)); observer[0].giveItem(warfareItem("steel_block", 64));
             scoped[0] = infantry("ScopedLauncher", 7, 18020.5, y, 0.5); scoped[0].profileAbilities().put("guns", false);
@@ -1098,59 +1323,65 @@ public final class SelfTest {
             track(() -> {
                 if (observer[0].getAliveTicks() < 50) unscoped[0] |= defense.placed(observer[0]) == 0;
                 if (observer[0].getAliveTicks() == 80) skills.warfare().access().gun(scope[0]).zoom(true);
+                if (observer[0].getAliveTicks() == 60 || observer[0].getAliveTicks() == 130) defense.warning(level, observer[0].getOnPos().getCenter(), server.getTickCount(), observer[0].getAliveTicks() == 60 ? "locking_warning" : "locked_warning");
+                if (observer[0].getAliveTicks() > 50) unscoped[0] &= defense.placed(observer[0]) == 0;
                 aimed[0] |= skills.warfare().describe(observer[0]).contains("missileAlert=AIM_WARNING");
                 if (observer[0].getAliveTicks() == 140) { skills.warfare().access().gun(scope[0]).zoom(false); observer[0].profileAbilities().put("missiledefense", false); }
-                if (observer[0].getAliveTicks() > 145) released[0] |= !defense.enclosed(observer[0], observer[0].blockPosition()) && skills.warfare().describe(observer[0]).contains("missileDefense=") == false;
+                if (observer[0].getAliveTicks() > 145) released[0] |= defense.placed(observer[0]) == 0 && skills.warfare().describe(observer[0]).contains("missileDefense=") == false;
             });
         }, () -> observer[0].getAliveTicks() > 150 && observer[0].isAlive() && aimed[0] && unscoped[0] && released[0]
-                && skills.warfare().access().gun(scope[0]).ammo() == 1, 220, true));
+                && defense.placed(observer[0]) == 0 && observer[0].countItem(warfareItem("steel_block", 1).getItem()) == 128 && skills.warfare().access().gun(scope[0]).ammo() == 1, 220, true));
         for (boolean top : new boolean[]{false, true}) for (boolean near : new boolean[]{false, true}) {
             int x = top ? (near ? 19700 : 19400) : (near ? 18500 : 18200); Bot[] flyer = {null}, launcher = {null}; Entity[] incoming = {null};
-            boolean[] changed = {false}, landed = {false}; double[] traveled = {0}; Vec3[] launchPosition = {null};
+            boolean[] changed = {false}, landed = {false}, bounded = {true}; double[] traveled = {0}; Vec3[] launchPosition = {null}; long[] firedAt = {-1};
+            java.util.Set<BlockPos> built = new java.util.HashSet<>(); int[] sampledPlaced = {0};
+            var material = ((net.minecraft.world.item.BlockItem) warfareItem("steel_block", 1).getItem()).getBlock();
             String mode = top ? "top attack" : "direct attack";
-            list.add(new Scenario("warfare missile elytra " + (near ? "imminent " + mode + " uses a large native maneuver and survives" : "early warning descends lands and survives a real " + mode + " Javelin"), () -> {
+            list.add(new Scenario("warfare missile elytra " + (near ? "imminent " + mode + " uses a large native maneuver and survives" : "early warning descends and lands with limited temporary cover against a real " + mode + " Javelin"), () -> {
                 warfareFlatArena(x - 50, -100, x + 230, 100, y); run("bot settings setgoal none");
                 flyer[0] = missileBot("EvadingFlyer" + near, 9, x + 100.5, y, 0.5);
                 flyer[0].profileAbilities().put("elytra", true); flyer[0].giveItem(new ItemStack(Items.ELYTRA)); flyer[0].giveItem(new ItemStack(Items.FIREWORK_ROCKET, 16)); flyer[0].giveItem(warfareItem("steel_block", 64)); flyer[0].giveItem(warfareItem("steel_block", 64));
                 launcher[0] = infantry("AirLauncher" + near, 7, x + (near ? 70.5 : 10.5), y, 0.5); launcher[0].profileAbilities().put("guns", false);
                 track(() -> {
                     if (flyer[0].getAliveTicks() == 75) { flyer[0].setPos(x + 100.5, y + (near ? 24 : 12), 0.5); flyer[0].setOnGround(false); flyer[0].setLook(-90, 0); flyer[0].launch(new Vec3(0.8, 0, 0)); flyer[0].startGliding(); }
-                    if (flyer[0].getAliveTicks() == 80) { launchPosition[0] = flyer[0].position(); incoming[0] = fireJavelin(launcher[0], flyer[0], top); }
+                    if (flyer[0].getAliveTicks() == 80) { launchPosition[0] = flyer[0].position(); incoming[0] = fireJavelin(launcher[0], flyer[0], top); firedAt[0] = server.getTickCount(); }
                     if (incoming[0] != null) {
                         String state = skills.warfare().describe(flyer[0]); changed[0] |= state.contains(near ? "missileDefense=EVASIVE" : "missileDefense=DESCEND");
-                        landed[0] |= flyer[0].isBotOnGround(); traveled[0] = Math.max(traveled[0], flyer[0].position().distanceTo(launchPosition[0]));
+                        landed[0] |= flyer[0].isAlive() && flyer[0].isBotOnGround(); bounded[0] &= defense.placed(flyer[0]) <= 4; traveled[0] = Math.max(traveled[0], flyer[0].position().distanceTo(launchPosition[0]));
+                        if (defense.placed(flyer[0]) > sampledPlaced[0]) {
+                            sampledPlaced[0] = defense.placed(flyer[0]); BlockPos feet = flyer[0].blockPosition();
+                            for (BlockPos p : BlockPos.betweenClosed(feet.offset(-5, -1, -5), feet.offset(5, 4, 5)))
+                                if (level.getBlockState(p).is(material)) built.add(p.immutable());
+                        }
                         if (flyer[0].getAliveTicks() % 5 == 0 && flyer[0].getAliveTicks() <= 145 || flyer[0].getAliveTicks() % 40 == 0) LOGGER.info("[SelfTest] Missile flight top={} near={} pos={} hp={} state={} landed={} traveled={} missile={}", top, near, flyer[0].position(), flyer[0].getHealth(), state, landed[0], traveled[0], incoming[0].position());
                     }
                 });
-            }, () -> incoming[0] != null && incoming[0].isRemoved() && flyer[0].getAliveTicks() > 220 && flyer[0].isAlive()
-                    && changed[0] && traveled[0] > 10 && (near || landed[0]), 600, true));
+            }, () -> incoming[0] != null && incoming[0].isRemoved() && server.getTickCount() - firedAt[0] > 220 && (near ? flyer[0].isAlive() : landed[0])
+                    && changed[0] && traveled[0] > 10 && bounded[0] && built.stream().noneMatch(p -> level.getBlockState(p).is(material)), 600, true));
         }
-        Bot[] shelterGroup = new Bot[6]; int[] lastPlaced = new int[6], peakPlacement = {0}; boolean[] groupClosed = new boolean[6];
-        list.add(new Scenario("warfare missile six shelters share a fair 24-block tick budget with finite native materials", () -> {
-            warfareFlatArena(20150, -30, 20250, 30, y); run("bot settings setgoal none");
+        Bot[] shelterGroup = new Bot[6], launchers = new Bot[6]; Entity[] groupMissiles = new Entity[6]; int[] lastPlaced = new int[6], peakPlacement = {0};
+        list.add(new Scenario("warfare missile six real inbound threats share a fair 24-block tick budget with finite native materials", () -> {
+            warfareFlatArena(20100, -40, 20300, 40, y); run("bot settings setgoal none");
             for (int i = 0; i < shelterGroup.length; i++) {
-                shelterGroup[i] = missileBot("BudgetShelter" + i, 9, 20170.5 + i * 12, y, 0.5);
+                shelterGroup[i] = missileBot("BudgetShelter" + i, 9, 20200.5, y, -30.5 + i * 12); shelterGroup[i].setInvulnerable(true);
                 shelterGroup[i].giveItem(warfareItem("steel_block", 64)); shelterGroup[i].giveItem(warfareItem("steel_block", 64));
+                launchers[i] = infantry("BudgetLauncher" + i, 7, 20110.5, y, -30.5 + i * 12); launchers[i].profileAbilities().put("guns", false);
             }
             track(() -> {
                 int placedThisTick = 0;
                 for (int i = 0; i < shelterGroup.length; i++) {
                     Bot b = shelterGroup[i];
-                    if (b.getAliveTicks() == 80 || b.getAliveTicks() == 100) {
-                        var sound = net.minecraft.core.registries.BuiltInRegistries.SOUND_EVENT.get(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("superbwarfare", "locked_warning"));
-                        level.playSound(null, b.getOnPos(), sound, net.minecraft.sounds.SoundSource.PLAYERS, 2, 1);
-                    }
+                    if (b.getAliveTicks() == 80) groupMissiles[i] = fireJavelin(launchers[i], b, false);
                     int placedNow = defense.placed(b); placedThisTick += placedNow - lastPlaced[i]; lastPlaced[i] = placedNow;
-                    groupClosed[i] |= defense.enclosed(b, b.blockPosition());
                 }
                 peakPlacement[0] = Math.max(peakPlacement[0], placedThisTick);
             });
         }, () -> {
-            if (shelterGroup[0].getAliveTicks() < 125 || peakPlacement[0] > 24) return false;
-            for (int i = 0; i < shelterGroup.length; i++) if (!groupClosed[i] || !shelterGroup[i].isAlive() || defense.placed(shelterGroup[i]) < 66
-                    || shelterGroup[i].countItem(warfareItem("steel_block", 1).getItem()) != 128 - defense.placed(shelterGroup[i])) return false;
-            LOGGER.info("[SelfTest] Six missile shelters peak placements={} counts={}", peakPlacement[0], java.util.Arrays.toString(lastPlaced)); return true;
-        }, 220, true));
+            if (shelterGroup[0].getAliveTicks() < 180 || peakPlacement[0] <= 0 || peakPlacement[0] > 24) return false;
+            for (int i = 0; i < shelterGroup.length; i++) if (!shelterGroup[i].isAlive() || defense.placed(shelterGroup[i]) != 4 || groupMissiles[i] == null || !groupMissiles[i].isRemoved()
+                    || shelterGroup[i].countItem(warfareItem("steel_block", 1).getItem()) != 124) return false;
+            LOGGER.info("[SelfTest] Six small barriers peak placements={} counts={}", peakPlacement[0], java.util.Arrays.toString(lastPlaced)); return true;
+        }, 300, true));
         Bot[] heliPilot = {null}, heliLauncher = {null}; Entity[] warnedHeli = {null}, heliMissile = {null}; boolean[] broke = {false}, decoy = {false};
         list.add(new Scenario("warfare missile helicopter native emergency break and finite decoys survive a real Javelin", () -> {
             warfareFlatArena(18800, -100, 19070, 100, y); run("bot settings setgoal none");
@@ -1558,11 +1789,12 @@ public final class SelfTest {
             double x = 23220.5 + index * 300, distance = index == 0 ? 18 : index == 1 ? 68 : 40;
             Bot[] attacker = {null}; Entity[] tank = {null}; LivingEntity[] friend = {null};
             long[] began = {-1}, placed = {-1}, ended = {-1}; float[] health = {0}, lastYaw = {0};
-            double[] turn = {0}; boolean[] alive = {true};
+            double[] turn = {0}; boolean[] alive = {true}; java.nio.file.Path[] stageFile = {null}; boolean[] logClosed = {false};
             String name = index == 2 ? "warfare C4 pass ally blocks the drop and one low pass exits promptly without circling"
                     : "warfare C4 pass level " + difficulty + " at " + (int) distance + " blocks places one charge and safely detonates promptly";
             list.add(new Scenario(name, () -> {
                 warfareFlatArena((int) x - 20, -35, (int) x + 190, 35, y); run("bot settings setgoal none");
+                run("bot log on"); stageFile[0] = skills.battleLog().path(); scenarioHooks.add(() -> skills.battleLog().toggle(false));
                 attacker[0] = ordnanceBot("C4Pass" + trial, difficulty, x, y, 0.5);
                 attacker[0].profileAbilities().put("drones", false); attacker[0].profileAbilities().put("c4", true); attacker[0].profileAbilities().put("elytra", true);
                 attacker[0].giveItem(new ItemStack(Items.ELYTRA)); attacker[0].giveItem(new ItemStack(Items.FIREWORK_ROCKET, 16));
@@ -1591,6 +1823,13 @@ public final class SelfTest {
                 });
             }, () -> {
                 if (began[0] < 0 || ended[0] < 0 || !alive[0] || turn[0] >= 90) return false;
+                if (attacker[0].getAliveTicks() < ended[0] + 65) return false;
+                if (attacker[0].isGliding() || skills.memory(attacker[0]).getFlight() != net.nuggetmc.tplus.api.agent.legacyagent.skill.BotMemory.Flight.NONE) return false;
+                if (!logClosed[0]) { skills.battleLog().toggle(false); logClosed[0] = true; }
+                var stageRows = battleRows(stageFile[0]);
+                if (stageRows.stream().noneMatch(o -> o.get("type").getAsString().equals("c4_end"))) return false;
+                if (stageRows.stream().filter(o -> o.get("type").getAsString().equals("c4_end")).anyMatch(o -> o.get("orbitTicks").getAsLong() > 80)) return false;
+                if (trial != 2 && !stageRows.stream().map(o -> o.get("type").getAsString()).collect(java.util.stream.Collectors.toSet()).containsAll(List.of("c4_approach", "c4_orbit_start", "c4_throw", "c4_detonate", "c4_exit"))) return false;
                 if (trial == 2) return ended[0] - began[0] <= 120 && placed[0] < 0 && friend[0].isAlive()
                         && vehicleHealth(tank[0]) == health[0] && attacker[0].countItem(warfareItem("c4_bomb", 1).getItem()) == 2
                         && tactics.detonations(attacker[0]) == 0;
@@ -2750,16 +2989,20 @@ public final class SelfTest {
         for (int hardness = 8; hardness <= 10; hardness++) {
             int value = hardness;
             Bot[] buffer = {null}, ally = {null};
-            list.add(new Scenario("team splash buffs at hardness " + value + " grant " + (value - 7) + " types", () -> {
-                run("bot settings hardness " + value); run("bot settings setgoal none");
+            int[] thrown = {0};
+            list.add(new Scenario("team clustered infantry hardness " + value + " never generates splash buffs", () -> {
+                run("bot settings hardness " + value); run("bot settings setgoal nearesthostile");
                 buffer[0] = spawnBot("Buffer" + value, 1410.5 + (value - 8) * 40, y, 0.5);
                 ally[0] = spawnBot("BuffAlly" + value, 1412.5 + (value - 8) * 40, y, 0.5);
-                ally[0].setHardnessOverride(7); testTeam("selftest_buff" + value, buffer[0], ally[0]);
-            }, () -> {
-                int count = 0;
-                for (var effect : List.of(MobEffects.DAMAGE_BOOST, MobEffects.MOVEMENT_SPEED, MobEffects.JUMP)) if (ally[0].hasEffect(effect)) count++;
-                return count == value - 7 && buffer[0].countItem(Items.SPLASH_POTION) == 0;
-            }, 380, true));
+                ally[0].setHardnessOverride(value); testTeam("selftest_buff" + value, buffer[0], ally[0]);
+                spawnHusk(1415.5 + (value - 8) * 40, y, 5.5, 500, false);
+                java.util.function.Consumer<net.neoforged.neoforge.event.entity.EntityJoinLevelEvent> listener = event -> {
+                    if (event.getEntity() instanceof net.minecraft.world.entity.projectile.ThrownPotion p
+                            && (p.getOwner() == buffer[0] || p.getOwner() == ally[0])) thrown[0]++;
+                };
+                NeoForge.EVENT_BUS.addListener(listener); scenarioHooks.add(() -> NeoForge.EVENT_BUS.unregister(listener));
+            }, () -> buffer[0].getAliveTicks() >= 220 && thrown[0] == 0 &&
+                    List.of(MobEffects.DAMAGE_BOOST, MobEffects.MOVEMENT_SPEED, MobEffects.JUMP).stream().noneMatch(ally[0]::hasEffect), 260, true));
         }
 
         Bot[] friendA = {null}, friendB = {null};

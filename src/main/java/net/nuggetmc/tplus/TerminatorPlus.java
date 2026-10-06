@@ -70,6 +70,7 @@ public class TerminatorPlus {
         bus.addListener(this::onServerStopped);
         bus.addListener(this::onServerTick);
         bus.addListener(this::onCombatDamage);
+        bus.addListener(net.neoforged.bus.api.EventPriority.LOWEST, this::onTotem);
         bus.addListener(net.neoforged.bus.api.EventPriority.LOWEST, this::onPlayerAttack);
         bus.addListener(this::onCoverBroken);
         bus.addListener(this::onCoverPlaced);
@@ -138,12 +139,15 @@ public class TerminatorPlus {
             catch (java.io.IOException e) { LOGGER.error("Cannot save opponent learning", e); }
             try { manager.saveSettings(); }
             catch (IllegalStateException e) { LOGGER.error("Cannot save TerminatorPlus settings", e); }
+            ((net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent) manager.getAgent()).getSkills().battleLog().shutdown();
             manager.reset();
         }
     }
 
     private void onCombatDamage(net.neoforged.neoforge.event.entity.living.LivingDamageEvent.Post event) {
-        if (manager == null || event.getNewDamage() <= 0 || !(event.getSource().getEntity() instanceof net.minecraft.world.entity.LivingEntity attacker)) return;
+        if (manager == null || event.getNewDamage() <= 0) return;
+        ((net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent) manager.getAgent()).getSkills().battleLog().damage(event.getEntity(), event.getSource(), event.getNewDamage());
+        if (!(event.getSource().getEntity() instanceof net.minecraft.world.entity.LivingEntity attacker)) return;
         var skills = ((net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent) manager.getAgent()).getSkills();
         skills.onTeamDamage(event.getEntity(), attacker);
         if (attacker instanceof Bot bot) {
@@ -159,6 +163,17 @@ public class TerminatorPlus {
             ((net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent) manager.getAgent()).getSkills().onPlayerAttack(player, target);
     }
 
+    private void onTotem(net.neoforged.neoforge.event.entity.living.LivingUseTotemEvent event) {
+        if (manager == null || event.isCanceled() || !(event.getEntity() instanceof Bot bot)) return;
+        var log = ((net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent) manager.getAgent()).getSkills().battleLog();
+        if (!log.enabled()) return;
+        ItemStackCapture capture = new ItemStackCapture(event.getTotem(), event.getTotem().getCount());
+        scheduler.runTask(() -> {
+            if (bot.isAlive() && capture.stack().getCount() < capture.count()) log.event("life", "totem", bot, "damageType", event.getSource().getMsgId());
+        });
+    }
+    private record ItemStackCapture(net.minecraft.world.item.ItemStack stack, int count) {}
+
     private void onCoverBroken(net.neoforged.neoforge.event.level.BlockEvent.BreakEvent event) {
         if (manager != null && !event.isCanceled() && event.getLevel() instanceof net.minecraft.server.level.ServerLevel world)
             ((net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent) manager.getAgent()).getSkills().invalidateCover(world, event.getPos());
@@ -167,7 +182,7 @@ public class TerminatorPlus {
         if (manager == null || event.isCanceled() || event.getSound() == null || !(event.getLevel() instanceof net.minecraft.server.level.ServerLevel level)) return;
         var id = event.getSound().value().getLocation();
         if (id.getNamespace().equals("superbwarfare") && (id.getPath().equals("locked_warning") || id.getPath().equals("locking_warning")))
-            ((net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent) manager.getAgent()).getSkills().missiles().warning(level, event.getPosition(), level.getServer().getTickCount());
+            ((net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent) manager.getAgent()).getSkills().missiles().warning(level, event.getPosition(), level.getServer().getTickCount(), id.getPath());
     }
     private void onCoverPlaced(net.neoforged.neoforge.event.level.BlockEvent.EntityPlaceEvent event) {
         if (manager != null && !event.isCanceled() && event.getLevel() instanceof net.minecraft.server.level.ServerLevel world)
@@ -187,6 +202,7 @@ public class TerminatorPlus {
     }
 
     private void onServerTick(ServerTickEvent.Pre event) {
+        if (manager != null) ((net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent) manager.getAgent()).getSkills().battleLog().tick();
         if (scheduler != null) {
             scheduler.tick();
         }

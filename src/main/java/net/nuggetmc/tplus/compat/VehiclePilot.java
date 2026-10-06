@@ -68,6 +68,7 @@ final class VehiclePilot {
     String describe(Entity vessel) { Flight f = flights.get(vessel); return f == null ? "IDLE" : f.phase + " nav=" + f.route.state + "/" + f.route.expanded
                 + (f.route.problem == null ? "" : " terrain=" + f.route.problem.reason() + "@" + f.route.problem.position().toShortString())
                 + (f.trafficGoal == null ? "" : " traffic=" + BlockPos.containing(f.trafficGoal).toShortString()); }
+    String telemetry(Entity vessel) { Flight f = flights.get(vessel); return f == null ? "IDLE" : f.phase + "/" + f.route.state; }
     boolean hasWaypoint(Entity vessel) { Flight f = flights.get(vessel); return f != null && f.waypoint != null; }
 
     boolean tick(Bot bot, Vessel vessel, @Nullable LivingEntity enemy, long now, boolean land, boolean waitForCrew) {

@@ -1,0 +1,55 @@
+{
+  "version": "4.22.0-BETA",
+  "jar": "C:\\Users\\13703\\Documents\\Codex\\2026-10-04\\http-200-https-github-com-sulfurchi\\outputs\\TerminatorPlus-NeoForge-1.21.1-4.22.0-BETA.jar",
+  "bytes": 839162,
+  "sha256": "12E4896231F496BADD3FDA810A9974257A1128BF64CD5BC11CA15E46BBA0DC4E",
+  "with_sbw_distinct_passing_scenarios": 42,
+  "native_run_10": {
+    "pass": 41,
+    "fail": 1,
+    "fixture_failure": "mortar has no native crew seat"
+  },
+  "native_fixture_retest_11": {
+    "pass": 2,
+    "fail": 0
+  },
+  "production_source_and_classes_match_run_10": true,
+  "final_without_sbw_25_pass": true,
+  "persisted_enabled_cold_start_1_pass": true,
+  "earlier_source_regression": {
+    "pass": 72,
+    "fail": 1,
+    "total": 73,
+    "failed": "old early direct Javelin guaranteed survival assertion superseded by P1-3 limited cover"
+  },
+  "full_base_139_not_run": true,
+  "full_native_124_not_run": true,
+  "frozen_files": 118,
+  "classes": 188,
+  "native_minimum_jar_class_bytes_match": true,
+  "minimum_neoforge": "21.1.1",
+  "jar_crc_verified": true,
+  "old_jars_preserved": true,
+  "suppression_attacks": 4,
+  "first_attack_latencies": [
+    67
+  ],
+  "logs": [
+    "4.22-minimum-cold-start-12.log",
+    "4.22-final-native-11.log",
+    "4.22-minimum-13.log",
+    "4.22-final-native-10.log",
+    "4.22-regression-4.log",
+    "4.22-final-native-6.log",
+    "4.22-final-native-9.log",
+    "4.22-cold-start-5.log",
+    "4.22-build-14.log"
+  ],
+  "ai_workers_not_enabled": true,
+  "known_prior_issues": [
+    "fixed three-block pit second crew boarding timeout",
+    "formal YX100 NO_ROUTE not reproduced",
+    "LAV-AD ground weapon behavior",
+    "historical infantry border and TeamDive failures"
+  ]
+}

@@ -29,9 +29,10 @@ public final class MissileDefense {
     private static final class State {
         Threat threat;
         String phase = "IDLE";
+        long nextShelter, buildStarted = -1;
+        String warningType = "LOCK_WARNING";
         long scanAt, warnedUntil, lastThreat = -1000, firstThreat = -1, started, searchAt, rocketAt, maneuverAt;
-        Vec3 origin, landing, coverDirection;
-        Entity coverMissile;
+        Vec3 origin, landing;
         BlockPos shelter;
         List<BlockPos> path;
         int pathIndex, placed;
@@ -48,7 +49,7 @@ public final class MissileDefense {
     MissileDefense(BotSkills skills) { this.skills = skills; }
     public String describe(Bot bot) {
         State s = states.get(bot);
-        return s == null ? "" : "; missileDefense=" + s.phase + "; missileAlert=" + (s.threat == null ? "NONE" : s.threat.alert()) + "; shelterBlocks=" + s.placed;
+        return s == null ? "" : "; missileDefense=" + s.phase + "; missileAlert=" + (s.threat == null ? "NONE" : s.threat.alert()) + "; shelterBlocks=" + s.blocks.size() + "; shelterPlaced=" + s.placed;
     }
     public int placed(Bot bot) { State s = states.get(bot); return s == null ? 0 : s.placed; }
     @Nullable public Threat threat(Bot bot, long now) {
@@ -60,7 +61,7 @@ public final class MissileDefense {
         s.threat = skills.warfare().access().missiles(bot).stream()
                 .map(m -> new Threat("INBOUND", m, m.entity().position(), Math.max(0, (m.entity().position().distanceTo(body.position()) - m.radius() * 2 - body.getBbWidth()) / Math.max(3, m.entity().getDeltaMovement().length()))))
                 .min(Comparator.comparingDouble(Threat::impactTicks)).orElse(null);
-        if (s.threat == null && now < s.warnedUntil) s.threat = new Threat("LOCK_WARNING", null, s.origin == null ? body.position() : s.origin, 1000);
+        if (s.threat == null && now < s.warnedUntil) s.threat = new Threat(s.warningType, null, s.origin == null ? body.position() : s.origin, 1000);
         if (s.threat == null && now % 4 < 2) {
             // A scoped launcher is only an aim warning; the client's private lock is never inferred as confirmed.
             for (LivingEntity shooter : bot.getBotLevel().getEntitiesOfClass(LivingEntity.class, body.getBoundingBox().inflate(256),
@@ -79,17 +80,22 @@ public final class MissileDefense {
         if (s.threat != null) { if (now - s.lastThreat > 4) s.firstThreat = now; s.lastThreat = now; }
         return s.threat;
     }
-    public void warning(ServerLevel level, Vec3 position, long now) {
+    public void warning(ServerLevel level, Vec3 position, long now) { warning(level, position, now, "locked_warning"); }
+    public void warning(ServerLevel level, Vec3 position, long now, String sound) {
         if (!skills.warfare().available()) return;
         for (var terminator : skills.bots()) if (terminator instanceof Bot bot && bot.level() == level && bot.isAlive()
                 && bot.getRootVehicle().getOnPos().distSqr(BlockPos.containing(position)) < 3) {
-            State s = states.computeIfAbsent(bot, b -> new State()); s.warnedUntil = now + 12; s.scanAt = 0;
+            State s = states.computeIfAbsent(bot, b -> new State()); s.warnedUntil = now + 12; s.scanAt = 0; s.warningType = sound.equals("locking_warning") ? "LOCKING_WARNING" : "LOCKED_WARNING";
+            skills.battleLog().event("missiles", "missile_warning", bot, "warning", sound, "source", BattleLog.pos(position));
         }
     }
     public boolean tick(Bot bot, long now) {
         if (!skills.warfare().available() || !skills.enabled(bot, "missiledefense") || !bot.isAlive()) { forget(bot); return false; }
         Threat alert = threat(bot, now); State s = states.get(bot);
         if (bot.isPassenger()) return false; // The native vehicle pilot consumes the same threat.
+        boolean airborne = bot.isGliding() || !bot.isBotOnGround() && bot.position().y - surface(bot, bot.position()) > 3;
+        boolean inbound = alert != null && alert.missile() != null;
+        if (!airborne && !inbound) { release(bot, s); return false; }
         if (alert == null && (!s.engaged || now - s.lastThreat > 35)) { release(bot, s); return false; }
         if (alert != null && !s.engaged) {
             if (now - s.firstThreat < skills.hardness(bot).reactionTicks()) return false;
@@ -105,38 +111,60 @@ public final class MissileDefense {
         }
         bot.stopGliding();
         BotMemory mem = skills.memory(bot); mem.flight = BotMemory.Flight.NONE; mem.maceDrop = false;
-        if (s.shelter != null && (s.secured || enclosed(bot, s.shelter)) && bot.position().subtract(Vec3.atBottomCenterOf(s.shelter)).horizontalDistance() < 1.4) {
-            s.secured = true;
-            boolean intact = enclosed(bot, s.shelter);
-            s.phase = intact ? "COVERED" : "REPAIR_SHELTER";
-            if (alert != null && alert.missile() != null) coverMove(bot, s, alert);
-            if (!intact) build(bot, s, now);
-            return true;
-        }
+        if (!constructionThreat(bot, alert)) { s.phase = "TRACK_MISSILE"; return false; }
+        if (now % 10 == 0) skills.battleLog().event("missiles", "missile_seen", bot, "missile", skills.battleLog().identity(alert.missile().entity()),
+                "distance", bot.distanceTo(alert.missile().entity()), "approaching", true);
         if (s.shelter == null && now >= s.searchAt) {
-            s.searchAt = now + 40; s.shelter = findShelter(bot);
-            if (s.shelter != null && bot.position().distanceTo(Vec3.atBottomCenterOf(s.shelter)) > 1) {
-                s.path = skills.pathfinder().find(bot.getBotLevel(), bot, s.shelter, 12); s.pathIndex = 1;
-                if (s.path == null) s.shelter = null;
-            }
+            s.searchAt = now + 40; s.shelter = findNaturalCover(bot, alert);
+            if (s.shelter != null) { s.path = skills.pathfinder().find(bot.getBotLevel(), bot, s.shelter, 12); s.pathIndex = 1; if (s.path == null) s.shelter = null; }
         }
-        if (s.shelter != null && now - s.started < 100 && bot.position().subtract(Vec3.atBottomCenterOf(s.shelter)).horizontalDistance() > 0.3) {
+        if (s.shelter != null && s.buildStarted < 0) {
             s.phase = "SEEK_SHELTER"; Vec3 goal = Vec3.atBottomCenterOf(s.shelter);
             if (s.path != null) {
                 while (s.pathIndex < s.path.size() && bot.position().distanceTo(Vec3.atBottomCenterOf(s.path.get(s.pathIndex))) < 0.7) s.pathIndex++;
                 if (s.pathIndex < s.path.size()) goal = Vec3.atBottomCenterOf(s.path.get(s.pathIndex));
             }
-            walk(bot, goal); return true;
+            if (bot.position().distanceTo(Vec3.atBottomCenterOf(s.shelter)) > 0.5) walk(bot, goal); else { bot.stand(); s.phase = "NATURAL_COVER"; }
+            return true;
         }
-        if (s.shelter == null || Math.abs(bot.getY() - s.shelter.getY()) > 0.6 || bot.position().subtract(Vec3.atBottomCenterOf(s.shelter)).horizontalDistance() > 0.5) { s.shelter = feet(bot); s.secured = false; }
-        Vec3 center = Vec3.atBottomCenterOf(s.shelter);
-        if (bot.position().subtract(center).horizontalDistance() > 0.12) { s.phase = "ALIGN_SHELTER"; walk(bot, center); return true; }
-        bot.stand();
-        s.phase = enclosed(bot, s.shelter) ? "COVERED" : "BUILD_SHELTER";
-        if (!s.phase.equals("COVERED")) build(bot, s, now);
-        if (enclosed(bot, s.shelter)) { s.phase = "COVERED"; s.secured = true; }
-        return true;
+        if (s.buildStarted < 0) {
+            if (now < s.nextShelter) { s.phase = "SHELTER_COOLDOWN"; return false; }
+            s.shelter = feet(bot); s.buildStarted = now; s.nextShelter = now + 500; s.placed = 0;
+            skills.battleLog().event("missiles", "shelter_start", bot, "missile", skills.battleLog().identity(alert.missile().entity()), "cooldownTicks", 500, "limit", 4);
+        }
+        // One finite barrier, never repair blocks broken by an attacker.
+        if (!s.secured && now - s.buildStarted <= 10 && s.placed < 4) build(bot, s, now);
+        if (!s.secured && (s.placed >= 4 || now - s.buildStarted > 10)) {
+            s.secured = true; skills.battleLog().event("missiles", "shelter_done", bot, "blocks", s.placed, "durationTicks", now - s.buildStarted);
+        }
+        s.phase = s.secured ? "SMALL_COVER" : "BUILD_SHELTER";
+        return false; // Infantry can still move and fight; a barrier is not an invulnerability state.
     }
+    private static boolean constructionThreat(Bot bot, @Nullable Threat alert) {
+        if (alert == null || alert.missile() == null) return false;
+        Entity missile = alert.missile().entity(); Vec3 to = bot.getBoundingBox().getCenter().subtract(missile.position());
+        return to.lengthSqr() <= 96 * 96 && missile.getDeltaMovement().dot(to) > 0.05 && clear(bot, bot.getEyePosition(), missile.position());
+    }
+    @Nullable private BlockPos findNaturalCover(Bot bot, Threat alert) {
+        BlockPos here = feet(bot); Vec3 incoming = alert.missile().entity().position();
+        for (int r : new int[]{2, 4, 6, 8}) for (int i = 0; i < 8; i++) {
+            BlockPos p = here.offset(Mth.floor(Math.cos(i * Math.PI / 4) * r), 0, Mth.floor(Math.sin(i * Math.PI / 4) * r));
+            if (!loaded(bot, new AABB(p).inflate(1)) || !solid(bot, p.below()) || !SkillUtil.passable(bot.getBotLevel(), p) || !SkillUtil.passable(bot.getBotLevel(), p.above())) continue;
+            Vec3 body = Vec3.atBottomCenterOf(p);
+            if (!clear(bot, incoming, body.add(0, 0.5, 0)) && !clear(bot, incoming, body.add(0, 1.6, 0)) && !clear(bot, body.add(0, 5, 0), body.add(0, 1.6, 0))) return p;
+        }
+        return null;
+    }
+    private static List<BlockPos> barrier(State s) {
+        Threat alert = s.threat;
+        if (alert != null && (alert.missile().topAttack() || alert.origin().y > s.shelter.getY() + 6))
+            return List.of(s.shelter.above(2), s.shelter.above(2).east(), s.shelter.above(2).south(), s.shelter.above(2).east().south());
+        Vec3 from = alert.origin().subtract(Vec3.atCenterOf(s.shelter));
+        net.minecraft.core.Direction toward = net.minecraft.core.Direction.getNearest(from.x, 0, from.z);
+        BlockPos wall = s.shelter.relative(toward); var side = toward.getClockWise();
+        return List.of(wall, wall.above(), wall.relative(side), wall.relative(side).above());
+    }
+
     private void fly(Bot bot, State s, @Nullable Threat alert, long now) {
         if (!bot.isGliding() && skills.enabled(bot, "elytra") && bot.hasUsableElytra()) bot.startGliding();
         if (!bot.isGliding()) { s.phase = "DESCEND"; return; }
@@ -196,64 +224,7 @@ public final class MissileDefense {
         }
         return null;
     }
-    @Nullable private BlockPos findShelter(Bot bot) {
-        BlockPos here = feet(bot);
-        if (enclosed(bot, here)) return here;
-        if (!loaded(bot, new AABB(here).inflate(14, 2, 14))) return null;
-        for (int r : new int[]{2, 4, 6, 8}) for (int i = 0; i < 8; i++) {
-            BlockPos p = here.offset(Mth.floor(Math.cos(i * Math.PI / 4) * r), 0, Mth.floor(Math.sin(i * Math.PI / 4) * r));
-            if (!solid(bot, p.below()) || !SkillUtil.passable(bot.getBotLevel(), p) || !SkillUtil.passable(bot.getBotLevel(), p.above())) continue;
-            if (innerShell(p).stream().filter(b -> solid(bot, b)).count() >= 54 && solid(bot, p.above(2))) {
-                boolean room = true;
-                for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++)
-                    room &= SkillUtil.passable(bot.getBotLevel(), p.offset(dx, 0, dz)) && SkillUtil.passable(bot.getBotLevel(), p.offset(dx, 1, dz));
-                if (room) return p;
-            }
-        }
-        return null;
-    }
-    public boolean enclosed(Bot bot, BlockPos feet) {
-        return loaded(bot, new AABB(feet).inflate(2)) && shell(feet).stream().allMatch(b -> solid(bot, b));
-    }
     private static BlockPos feet(Bot bot) { return BlockPos.containing(bot.getX(), bot.getY() + 0.05, bot.getZ()); }
-    private static List<BlockPos> innerShell(BlockPos feet) {
-        List<BlockPos> result = new ArrayList<>();
-        for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) result.add(feet.offset(dx, 2, dz));
-        for (int dy = 0; dy <= 2; dy++) for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++)
-            if (Math.abs(dx) == 2 || Math.abs(dz) == 2) result.add(feet.offset(dx, dy, dz));
-        result.add(feet.below()); return result;
-    }
-    private static List<BlockPos> shell(BlockPos feet) {
-        List<BlockPos> result = innerShell(feet);
-        // The native projectile can cross thin walls in a single tick. Keep a second roof and room to move inside.
-        for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) result.add(feet.offset(dx, 3, dz));
-        return result;
-    }
-    private static void coverMove(Bot bot, State s, Threat alert) {
-        Entity missile = alert.missile().entity();
-        Vec3 center = Vec3.atBottomCenterOf(s.shelter);
-        if (s.coverMissile != missile) {
-            s.coverMissile = missile;
-            Vec3 heading = missile.getDeltaMovement();
-            if (heading.horizontalDistanceSqr() < 0.01) heading = bot.position().subtract(missile.position());
-            s.coverDirection = new Vec3(-heading.z, 0, heading.x).normalize();
-        }
-        double distance = missile.position().distanceTo(bot.position());
-        // Move clear of the incoming line early enough to brake before native lag-compensated contact.
-        Vec3 step;
-        if (alert.missile().topAttack()) {
-            // Top attack can turn almost instantly; continuous lateral motion works better than a terminal reversal.
-            Vec3 radial = bot.position().subtract(center).multiply(1, 0, 1);
-            Vec3 tangent = radial.lengthSqr() > 0.04 ? new Vec3(-radial.z, 0, radial.x).normalize() : s.coverDirection;
-            step = tangent.scale(0.2).subtract(radial.scale(0.3));
-        } else {
-            Vec3 goal = center.add(s.coverDirection.scale(distance < 24 ? 1.1 : 0));
-            Vec3 delta = goal.subtract(bot.position()).multiply(1, 0, 1);
-            step = delta.length() < 0.15 ? bot.getVelocity().multiply(-1, 0, -1) : delta.normalize().scale(0.2);
-        }
-        AABB next = bot.getBoundingBox().move(step.normalize().scale(0.4)).deflate(0.01);
-        if (loaded(bot, next) && bot.level().noCollision(bot, next)) { bot.stand(); bot.walk(step); }
-    }
     private void build(Bot bot, State s, long now) {
         if (placementTick != now) {
             placementTick = now; placementBudget = 24;
@@ -273,16 +244,18 @@ public final class MissileDefense {
         }
         BlockState state = block.defaultBlockState();
         boolean fromInventory = !resource.isEmpty();
-        for (BlockPos pos : shell(s.shelter)) {
+        for (BlockPos pos : barrier(s)) {
+            if (s.placed >= 4) break;
             if (limit == 0 || !loaded(bot, new AABB(pos))) break;
             if (solid(bot, pos) || !state.isCollisionShapeFullBlock(bot.level(), pos) || !bot.getBotLevel().getBlockState(pos).canBeReplaced()
                     || !bot.getBotLevel().getFluidState(pos).isEmpty() || bot.position().distanceTo(Vec3.atCenterOf(pos)) > 4.5
                     || new AABB(pos).intersects(bot.getBoundingBox())
                     || !bot.getBotLevel().getEntities(bot, new AABB(pos), e -> e.blocksBuilding && !e.isSpectator()).isEmpty()) continue;
             if (fromInventory && (resource.isEmpty() || !bot.consumeItem(resource.getItem()))) break;
-            bot.attemptBlockPlace(pos, block, false);
+            bot.attemptBlockPlace(pos, block, false, "missile_shelter");
             if (bot.getBotLevel().getBlockState(pos).equals(state)) {
                 s.blocks.put(GlobalPos.of(bot.getBotLevel().dimension(), pos), state); s.placed++; limit--; placementBudget--;
+
             }
         }
     }
@@ -312,12 +285,23 @@ public final class MissileDefense {
         return loaded(bot, new AABB(from, to).inflate(0.5)) && bot.getBotLevel().clip(new ClipContext(from, to, ClipContext.Block.COLLIDER, ClipContext.Fluid.ANY, bot)).getType() == HitResult.Type.MISS;
     }
     private void release(Bot bot, State s) {
-        if (s.engaged) { skills.memory(bot).nextTakeoff = Math.max(skills.memory(bot).nextTakeoff, bot.getServer().getTickCount() + 100); cleanup(s); }
+        if (s.engaged) {
+            skills.memory(bot).nextTakeoff = Math.max(skills.memory(bot).nextTakeoff, bot.getServer().getTickCount() + 100);
+            cleanup(bot, s, "threat_passed");
+        }
         s.engaged = false; s.secured = false; s.ceilingEscape = false;
-        s.phase = "IDLE"; s.shelter = null; s.landing = null; s.path = null; s.coverMissile = null; s.coverDirection = null;
+        s.buildStarted = -1; s.phase = "IDLE"; s.shelter = null; s.landing = null; s.path = null;
     }
-    private void cleanup(State s) {
-        pending.putAll(s.blocks); s.blocks.clear(); sweep();
+    private void cleanup(Bot bot, State s, String reason) {
+        int removed = 0, deferred = 0, owned = s.blocks.size();
+        for (var entry : s.blocks.entrySet()) {
+            var level = bot.getServer().getLevel(entry.getKey().dimension()); BlockPos pos = entry.getKey().pos();
+            if (level == null || !level.hasChunkAt(pos)) { pending.put(entry.getKey(), entry.getValue()); deferred++; }
+            else if (level.getBlockState(pos).equals(entry.getValue()) && level.removeBlock(pos, false)) removed++;
+        }
+        s.blocks.clear();
+        if (s.buildStarted >= 0) skills.battleLog().event("missiles", "shelter_removed", bot, "blocks", removed, "ownedBlocks", owned, "pending", deferred,
+                "durationTicks", bot.getServer().getTickCount() - s.buildStarted, "reason", reason, "removal", "matching_owned_blocks_only");
     }
     public void sweep() {
         pending.entrySet().removeIf(entry -> {
@@ -329,6 +313,6 @@ public final class MissileDefense {
         });
     }
     public void invalidate(GlobalPos pos) { pending.remove(pos); states.values().forEach(s -> s.blocks.remove(pos)); }
-    public void forget(Bot bot) { State s = states.remove(bot); if (s != null) cleanup(s); }
+    public void forget(Bot bot) { State s = states.remove(bot); if (s != null) cleanup(bot, s, "owner_or_ability_removed"); }
     public void clear() { for (Bot b : List.copyOf(states.keySet())) forget(b); }
 }

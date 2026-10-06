@@ -211,8 +211,10 @@ final class TeamBoard {
                 .min(Comparator.comparingDouble(p -> p.distanceTo(bot))).orElse(null);
         if (ally == null) return false;
         mem.teamRole = BotMemory.TeamRole.GUARD; mem.guardedAlly = ally.getId();
-        bot.stand(); bot.faceLocation(ally.position()); bot.setItem(bot.getWeapon());
-        return bot.distanceTo(ally) <= 5 || step(bot, ally.position());
+        bot.stand(); bot.setItem(bot.getWeapon());
+        if (bot.distanceTo(ally) <= 5) return true;
+        bot.faceLocation(ally.position());
+        return step(bot, ally.position());
     }
     boolean position(Bot bot, BotMemory mem, LivingEntity target, long now) {
         if (!cooperative(bot) || skills.hardness(bot).level() != 10 || mem.roleTarget != target.getId()

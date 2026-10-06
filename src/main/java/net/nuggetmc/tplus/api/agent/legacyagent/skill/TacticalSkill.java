@@ -6,11 +6,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.projectile.ThrownPotion;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.item.alchemy.PotionContents;
-import net.minecraft.world.item.alchemy.Potions;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.HitResult;
@@ -21,9 +18,7 @@ import net.nuggetmc.tplus.bot.Bot;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.Random;
 import java.util.Map;
 import java.util.LinkedHashMap;
 
@@ -238,7 +233,7 @@ final class TacticalSkill {
                         || !bot.getBotLevel().getFluidState(pos).isEmpty()
                         || !bot.getBotLevel().getEntities(bot, new AABB(pos)).isEmpty() || new AABB(pos).intersects(bot.getBoundingBox())) continue;
                 var state = skills.settings().buildBlock.defaultBlockState();
-                bot.attemptBlockPlace(pos, skills.settings().buildBlock, false);
+                bot.attemptBlockPlace(pos, skills.settings().buildBlock, false, "tactical_cover");
                 if (bot.getBotLevel().getBlockState(pos).equals(state)) {
                     mem.cover.put(GlobalPos.of(bot.getBotLevel().dimension(), pos), state);
                     mem.coverExpires = manager.getServer().getTickCount() + 600;
@@ -277,32 +272,6 @@ final class TacticalSkill {
     private void support(Bot bot, BotMemory mem, @Nullable LivingEntity target, long now) {
         if (mem.tactic == BotMemory.Tactic.COVER_ALLY) mem.tactic = BotMemory.Tactic.FIGHT;
         mem.protectedAlly = null;
-        List<ServerPlayer> close = allies(bot, 4);
-        if (now >= mem.nextBuff && !close.isEmpty() && !bot.isConsuming()
-                && bot.getBotLevel().getEntitiesOfClass(LivingEntity.class, bot.getBoundingBox().inflate(5),
-                e -> e != bot && e.isAlive() && !allied(bot, e)).isEmpty()) {
-            var effects = new ArrayList<>(List.of(Potions.STRENGTH, Potions.SWIFTNESS, Potions.LEAPING));
-            Collections.shuffle(effects, new Random(bot.getUUID().getMostSignificantBits()));
-            for (int i = 0; i < skills.hardness(bot).buffCount(); i++) {
-                var potion = effects.get(i);
-                var effect = potion.value().getEffects().getFirst().getEffect();
-                if (bot.hasEffect(effect) && close.stream().allMatch(p -> p.hasEffect(effect))) continue;
-                Vec3 center = bot.position();
-                for (ServerPlayer ally : close) center = center.add(ally.position());
-                center = center.scale(1.0 / (close.size() + 1));
-                ThrownPotion thrown = new ThrownPotion(bot.getBotLevel(), bot);
-                ItemStack stack = new ItemStack(Items.SPLASH_POTION);
-                stack.set(DataComponents.POTION_CONTENTS, new PotionContents(potion));
-                thrown.setItem(stack);
-                Vec3 delta = center.add(0, 0.1, 0).subtract(bot.getEyePosition());
-                thrown.shoot(delta.x, delta.y, delta.z, 0.5F, 0);
-                bot.getBotLevel().addFreshEntity(thrown);
-                skills.chatter().say(bot, "ally.buff", target, Map.of("buffs", potion.is(Potions.STRENGTH) ? "力量" : potion.is(Potions.SWIFTNESS) ? "迅捷" : "跳跃提升"));
-                bot.punch();
-                mem.nextBuff = now + 100;
-                break;
-            }
-        }
         if (target == null || mem.tactic != BotMemory.Tactic.FIGHT || bot.getHealth() < bot.getMaxHealth() * 0.65) return;
         ServerPlayer assigned = skills.guardedAlly(bot);
         List<ServerPlayer> wounded = assigned != null ? List.of(assigned) : allies(bot, 8);

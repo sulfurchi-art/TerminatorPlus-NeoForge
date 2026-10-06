@@ -33,6 +33,8 @@ public final class EquipmentPresets {
                 throw new IllegalArgumentException("预设队伍不存在：" + team);
         }
         public void apply(Bot bot, boolean applyTeam) {
+            var store = net.nuggetmc.tplus.TerminatorPlus.getManager().presets();
+            bot.equipmentLabel(store.names().stream().filter(n -> store.get(n) == this).findFirst().orElse("custom_preset"));
             var scoreboard = bot.getServer().getScoreboard();
             String team = profile.getString("Team");
             if (applyTeam) validateTeam(bot.getServer());

@@ -20,7 +20,8 @@ import java.util.*;
 public final class VehicleCrew {
     private static final class Member {
         final Vessel vessel;
-        int seat, target = -1, scanDirection = 1;
+        int seat, target = -1;
+        long requestedAt;
         long expires, shots, aimSince, lockSince = -1, nextError, mountedPendingUntil = -1;
         double errorYaw, errorPitch;
         boolean leaving;
@@ -59,6 +60,7 @@ public final class VehicleCrew {
         return "; crew=" + (bot.getVehicle() == m.vessel.entity() ? "seat " + m.vessel.seatIndex(bot) : "boarding " + m.seat)
                 + "; vehicleShots=" + m.shots + "; weapon=" + m.weaponState + "; vehiclePilot=" + pilot.describe(m.vessel.entity()) + "; decoys=" + m.vessel.decoys() + (m.leaving ? "; leaving" : "");
     }
+    public String telemetry(Bot bot) { Member m = members.get(bot); return m == null ? "NONE" : (bot.getVehicle() == m.vessel.entity() ? "seat=" + m.vessel.seatIndex(bot) : "boarding=" + m.seat) + ";weapon=" + m.weaponState + ";nav=" + pilot.telemetry(m.vessel.entity()); }
     public long shots(Bot bot) { Member m = members.get(bot); return m == null ? 0 : m.shots; }
 
     public Entity findVehicle(Bot bot, String name) {
@@ -78,6 +80,11 @@ public final class VehicleCrew {
                 .orElseThrow(() -> new IllegalArgumentException("附近 32 格没有可用的未上锁载具。"));
     }
     public void board(Bot bot, Entity entity, int requestedSeat) {
+        skills.battleLog().event("vehicles", "board_request", bot, "requestedVehicle", skills.battleLog().identity(entity), "seat", requestedSeat, "distance", entity == null ? null : bot.distanceTo(entity));
+        try { requestBoard(bot, entity, requestedSeat); }
+        catch (IllegalArgumentException failure) { skills.battleLog().event("vehicles", "board_fail", bot, "reason", failure.getMessage(), "waitTicks", 0); throw failure; }
+    }
+    private void requestBoard(Bot bot, Entity entity, int requestedSeat) {
         Vessel vessel = warfare.vessel(entity);
         if (!net.nuggetmc.tplus.api.agent.legacyagent.skill.MovementBounds.contains(entity, entity.position(), 3))
             throw new IllegalArgumentException("载具须在世界边界内并保留登车空间。");
@@ -96,7 +103,9 @@ public final class VehicleCrew {
         if (seat == 0 && !supportsDriver(bot, vessel)) throw new IllegalArgumentException("直升机驾驶需要 9–10 级及 helicopters；该载具引擎类型尚不支持驾驶。");
         if (bot.isPassenger() && bot.getVehicle() != entity) throw new IllegalArgumentException("机器人正在另一台载具上，先让它离席。");
         warfare.release(bot); bot.stopGliding();
-        members.put(bot, new Member(vessel, seat, bot.server.getTickCount() + 400L));
+        Member request = new Member(vessel, seat, bot.server.getTickCount() + 400L); request.requestedAt = bot.server.getTickCount();
+        members.put(bot, request);
+
     }
     public int boardCrew(Bot leader, Entity entity) {
         List<Bot> team = new ArrayList<>(); team.add(leader);
@@ -159,17 +168,22 @@ public final class VehicleCrew {
             if (m == null) return false;
         }
         Vessel v = m.vessel; Entity entity = v.entity();
-        if (entity.isRemoved() || entity.level() != bot.level()) { forget(bot); return false; }
+        if (entity.isRemoved() || entity.level() != bot.level()) {
+            if (!bot.isPassenger()) skills.battleLog().event("vehicles", "board_fail", bot, "reason", entity.isRemoved() ? "vehicle_removed" : "dimension_changed", "waitTicks", now - m.requestedAt, "distance", bot.distanceTo(entity));
+            forget(bot); return false;
+        }
         if (!bot.isPassenger()) {
             if (m.leaving || now > m.expires || v.locked() || v.wreck() || !skills.enabled(bot, "vehicles") && !v.engine().equals("FIXED")) {
+                skills.battleLog().event("vehicles", "board_fail", bot, "requestedVehicle", skills.battleLog().identity(entity), "reason", m.leaving ? "cancelled" : now > m.expires ? "timeout" : v.locked() ? "locked" : v.wreck() ? "wreck" : "ability_disabled", "waitTicks", now - m.requestedAt, "distance", bot.distanceTo(entity));
                 forget(bot); boardingRest.put(bot, now + 100); return false;
             }
             if (bot.canInteractWithEntity(entity.getBoundingBox(), 0) && bot.level().clip(new ClipContext(bot.getEyePosition(), entity.getBoundingBox().getCenter(),
                     ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, bot)).getType() == HitResult.Type.MISS && v.board(bot, m.seat)) {
+                skills.battleLog().event("vehicles", "board_ok", bot, "waitTicks", now - m.requestedAt, "distance", bot.distanceTo(entity));
                 m.expires = Long.MAX_VALUE; bot.walk(Vec3.ZERO); bot.setLook(entity.getYRot(), 0);
             } else {
                 Vec3 delta = entity.position().subtract(bot.position());
-                if (delta.lengthSqr() > 48 * 48) { forget(bot); return false; }
+                if (delta.lengthSqr() > 48 * 48) { skills.battleLog().event("vehicles", "board_fail", bot, "reason", "vehicle_moved_out_of_range", "waitTicks", now - m.requestedAt, "distance", delta.length()); forget(bot); return false; }
                 approachEntry(bot, m, now);
                 warfare.release(bot); return true;
             }
@@ -187,9 +201,11 @@ public final class VehicleCrew {
                 if (!m.leaving && !evacuate) return true;
                 if (!v.wreck() && now <= m.mountedPendingUntil) return true;
                 if (m.seat == 0) v.input(bot, 16, 0, 0);
+                skills.battleLog().event("vehicles", "evacuate", bot, "reason", v.wreck() ? "wreck" : evacuate ? "low_vehicle_health" : "requested", "healthRatio", v.health() / v.maxHealth());
                 bot.stopRiding(); forget(bot); boardingRest.put(bot, now + 200); return true;
             }
             if (v.wreck() && bot.hasUsableElytra()) {
+                skills.battleLog().event("vehicles", "evacuate", bot, "reason", "airborne_wreck", "healthRatio", v.health() / v.maxHealth());
                 bot.stopRiding(); forget(bot); bot.startGliding(); boardingRest.put(bot, now + 200); return true;
             }
             // The pilot lands first. Other members stay aboard until a safe dismount is possible.
@@ -197,18 +213,14 @@ public final class VehicleCrew {
             return true;
         }
         if (now > m.mountedPendingUntil && v.passenger(0) == null && supportsDriver(bot, v) && v.seats().size() > 0 && free(v, 0, bot)) {
-            if (v.changeSeat(bot, 0)) m.seat = 0;
+            int from = m.seat;
+            if (v.changeSeat(bot, 0)) { m.seat = 0; skills.battleLog().event("vehicles", "seat_change", bot, "from", from, "to", 0, "reason", "vacant_driver"); }
         }
         if (m.seat == 0) {
             boolean pending = members.entrySet().stream().anyMatch(e -> e.getKey() != bot && e.getValue().vessel.entity() == entity
                     && !e.getKey().isPassenger() && !e.getValue().leaving && now < e.getValue().expires);
             if (supportsDriver(bot, v)) pilot.tick(bot, v, enemy, now, false, pending);
             else { v.input(bot, v.engine().equals("HELICOPTER") ? 0 : 16, 0, 0); }
-        }
-        if (enemy == null && (canUseHand(bot) || skills.enabled(bot, "vehicleweapons")) && now % 5 == 0) {
-            float before = bot.getYRot();
-            bot.setLook(before + m.scanDirection * (3 + skills.hardness(bot).level()), 0); v.clampLook(bot);
-            if (Math.abs(Mth.wrapDegrees(bot.getYRot() - before)) < 1) m.scanDirection = -m.scanDirection;
         }
         if (skills.enabled(bot, "recovery") && bot.getHealth() < bot.getMaxHealth() * 0.6 && canUseHand(bot)) bot.beginRecoveryItem(false);
         if (!bot.isConsuming() && skills.enabled(bot, "vehicleweapons") && mounted(bot, m, ship, enemy, observedVelocity, now)) {
@@ -318,23 +330,28 @@ public final class VehicleCrew {
         if (target.getPassengers().stream().anyMatch(bot::isAlliedTo)) return false;
         List<MountedWeapon> weapons = v.weapons(bot); if (weapons.isEmpty()) return false;
         double distance = v.muzzle(bot).distanceTo(target.getBoundingBox().getCenter());
+        java.util.List<String> rejected = skills.battleLog().enabled() ? new ArrayList<>() : null;
         MountedWeapon best = null; double score = -Double.MAX_VALUE;
         for (MountedWeapon w : weapons) {
             Specs spec = w.specs();
             if ((!w.ready() && w.reserve() <= 0) || spec.projectiles() < 1 || spec.projectiles() > 64
-                    || spec.shootDelay() > 200 || distance > Math.min(256, spec.range()) || spec.explosionRadius() > 0 && distance < spec.explosionRadius() + 5) continue;
-            if (spec.seekTime() > 0 && !warfare.access().isVehicle(target) && !target.isPassenger()) continue;
+                    || spec.shootDelay() > 200 || distance > Math.min(256, spec.range()) || spec.explosionRadius() > 0 && distance < spec.explosionRadius() + 5) { if (rejected != null) rejected.add(w.name() + ":ammo_or_range_or_unsafe_blast"); continue; }
+            if (spec.seekTime() > 0 && !warfare.access().isVehicle(target) && !target.isPassenger()) { if (rejected != null) rejected.add(w.name() + ":requires_vehicle_lock"); continue; }
             double value = w.ready() ? 8 : 0;
             if (warfare.access().isVehicle(target)) {
                 double effective = warfare.access().vehicleDamage(target, bot, v.weaponGun(bot, w.index()));
-                if (effective <= 0) continue;
+                if (effective <= 0) { if (rejected != null) rejected.add(w.name() + ":no_effective_vehicle_damage"); continue; }
                 value += Math.log1p(effective) * 5;
             } else value += (spec.rpm() >= 300 ? 10 : 0) + Math.min(4, spec.damage() * 0.02) - spec.explosionRadius()
                     + (spec.explosionRadius() == 0 && (spec.magazine() == 0 || spec.magazine() > 5) ? 14 : 0);
             if (w.index() == v.selectedWeapon(bot)) value += 0.5;
             if (value > score) { best = w; score = value; }
         }
-        if (best == null) { m.weaponState = "no usable weapon"; return false; }
+        if (best == null) {
+            if (!m.weaponState.equals("no usable weapon")) skills.battleLog().event("weapons", "weapon_select", bot, "weapon", null, "reason", "no usable weapon", "rejected", rejected);
+            m.weaponState = "no usable weapon"; return false;
+        }
+        if (!best.name().equals(m.weaponState)) skills.battleLog().event("weapons", "weapon_select", bot, "weapon", best.name(), "reason", "seat_range_ammo_effective_damage_score", "rejected", rejected);
         if (v.selectedWeapon(bot) != best.index()) { v.selectWeapon(bot, best.index()); m.aimSince = now; m.lockSince = -1; }
         if (m.target != target.getId()) { m.target = target.getId(); m.aimSince = now; m.lockSince = -1; }
         m.weaponState = best.name();

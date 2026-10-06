@@ -171,7 +171,7 @@ public class LegacyAgent extends Agent {
 
     private void tickBot(Terminator bot) {
         try { tickBotActions(bot); }
-        finally { if (bot.isBotAlive()) skills.finishWeapons(bot); }
+        finally { if (bot.isBotAlive()) { skills.finishWeapons(bot); if (bot instanceof net.nuggetmc.tplus.bot.Bot b) skills.battleLog().observe(b); } }
     }
 
     private void tickBotActions(Terminator bot) {
@@ -1415,6 +1415,7 @@ public class LegacyAgent extends Agent {
     public void setTargetType(EnumTargetGoal goal) {
         if (this.goal != goal) skills.clearTeamFocus();
         this.goal = goal;
+        skills.battleLog().goal(goal);
     }
 
     /**

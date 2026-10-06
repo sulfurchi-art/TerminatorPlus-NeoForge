@@ -61,6 +61,7 @@ public interface WarfareAccess {
         boolean wreck();
         float health();
         float maxHealth();
+        default java.util.Map<String, Float> partHealth() { return java.util.Map.of(); }
         int energy();
         int maxEnergy();
         void energy(int value);

@@ -25,6 +25,7 @@ public final class DefaultEquipment {
 
     public static void apply(Bot bot, int level) {
         if (level < 1 || level > 10) throw new IllegalArgumentException("AI hardness must be 1–10");
+        bot.equipmentLabel("vanilla:" + level);
         bot.prepareEquipmentPreset();
         bot.getInventory().clearContent();
         Item sword = level == 1 ? Items.WOODEN_SWORD : level == 2 ? Items.STONE_SWORD
@@ -105,6 +106,7 @@ public final class DefaultEquipment {
         }
         ItemStack helmet = sbw(level <= 3 ? "ge_helmet_m_35" : level <= 7 ? "ru_helmet_6b47" : "us_helmet_pasgt", 1);
         ItemStack chest = level < 3 ? ItemStack.EMPTY : sbw(level <= 7 ? "ru_chest_6b43" : "us_chest_iotv", 1);
+        bot.equipmentLabel("warfare:" + level);
         bot.prepareEquipmentPreset(); bot.getInventory().clearContent();
         bot.setItemSlot(EquipmentSlot.HEAD, helmet); bot.setItemSlot(EquipmentSlot.CHEST, chest);
         bot.setItemSlot(EquipmentSlot.LEGS, ItemStack.EMPTY); bot.setItemSlot(EquipmentSlot.FEET, ItemStack.EMPTY);

@@ -35,7 +35,9 @@ public final class WarfareTactics {
         Vec3 passDirection = Vec3.ZERO;
         AABB targetBounds;
         double closest;
-        long progressAt, placedAt;
+        long progressAt, placedAt, nearSince = -1, firstAttack = -1, exitStarted;
+        double turnDegrees; float lastYaw; boolean exiting, pendingFire; int fireAmmo;
+        String fireKind; double fireDistance;
         String c4Result = "";
         long started, seen, nextAttempt, nextFire;
         int lastVertical, verticalTicks, drops, detonations;
@@ -58,8 +60,18 @@ public final class WarfareTactics {
     public void clear() { for (Bot bot : List.copyOf(states.keySet())) forget(bot); }
     public void cancel(Bot bot) {
         State s = states.get(bot);
-        if (s == null || s.mode == Mode.IDLE) return;
-        if (s.drone != null && s.hand != null) s.drone.stop(bot, s.hand.stack);
+        if (s == null) return;
+        if (s.mode == Mode.IDLE) { s.exiting = false; return; }
+        if (s.mode == Mode.C4_APPROACH || s.mode == Mode.C4_EGRESS) {
+            long now = bot.getServer().getTickCount();
+            String reason = s.c4Result.equals("APPROACH") || s.c4Result.equals("PLACED") ? "CANCELLED" : s.c4Result;
+            skills.battleLog().event("c4", "c4_end", bot, "reason", reason, "aborted", !reason.equals("DETONATED"), "durationTicks", now - s.started,
+                    "orbitTicks", s.nearSince < 0 ? 0 : (s.placedAt > 0 ? s.placedAt : now) - s.nearSince, "orbits", s.turnDegrees / 360);
+        }
+        if (s.drone != null && s.hand != null) {
+            skills.battleLog().event("drones", "drone_lost", bot, "drone", skills.battleLog().identity(s.drone.entity()), "reason", s.returning ? "mission_returned" : !bot.isAlive() ? "operator_dead_entity_retained" : "control_released", "durationTicks", bot.getServer().getTickCount() - s.started);
+            s.drone.stop(bot, s.hand.stack);
+        }
         if (s.hand != null) s.hand.close();
         BotMemory mem = skills.memory(bot);
         if (mem.plan == BotMemory.FlightPlan.C4) {
@@ -73,7 +85,7 @@ public final class WarfareTactics {
             if (s.c4Result.equals("APPROACH") || s.c4Result.equals("PLACED")) s.c4Result = "CANCELLED";
         }
         s.hand = null; s.drone = null; s.target = null; s.charge = null;
-        s.mode = Mode.IDLE;
+        s.mode = Mode.IDLE; s.exiting = false;
         s.nextAttempt = Math.max(s.nextAttempt, bot.getServer().getTickCount() + 300);
     }
     public boolean tick(Bot bot, @Nullable LivingEntity enemy, long now) {
@@ -97,6 +109,19 @@ public final class WarfareTactics {
         var access = skills.warfare().access();
         if (access == null) { cancel(bot); return false; }
         State s = states.get(bot);
+        if (s != null && s.exiting) {
+            if (!skills.enabled(bot, "c4") || bot.isPassenger() || !bot.isAlive() || bot.isConsuming()) { s.exiting = false; return false; }
+            BotMemory mem = skills.memory(bot);
+            double floor = SkillUtil.surfaceY(bot.getBotLevel(), bot.position());
+            if (!bot.isGliding() || bot.getY() - floor < 2 || now - s.exitStarted >= 60) {
+                s.exiting = false; mem.flight = BotMemory.Flight.NONE; mem.maceDrop = false; bot.stopGliding();
+                skills.battleLog().event("c4", "c4_exit", bot, "durationTicks", now - s.exitStarted, "reason", "bounded_descent_finished");
+                return false;
+            }
+            // Keep the same pass heading and descend with native controls. Never re-target the flight centre.
+            bot.setLook(Mth.approachDegrees(bot.getYRot(), SkillUtil.yawTo(Vec3.ZERO, s.passDirection), 12), Mth.approach(bot.getXRot(), 65, 12));
+            return true;
+        }
         if (s != null && s.mode != Mode.IDLE) {
             boolean enabled = skills.enabled(bot, s.mode == Mode.DRONE ? "drones" : "c4");
             BotMemory mem = skills.memory(bot);
@@ -125,7 +150,8 @@ public final class WarfareTactics {
                 s.passDirection = s.observed.subtract(bot.position()).multiply(1, 0, 1).normalize();
                 s.targetBounds = enemy.getRootVehicle().getBoundingBox();
                 s.closest = SkillUtil.horizontalDistance(bot.position(), s.observed); s.progressAt = now; s.placedAt = 0;
-                s.c4Result = "APPROACH";
+                s.c4Result = "APPROACH"; s.nearSince = -1; s.turnDegrees = 0; s.lastYaw = bot.getYRot();
+                skills.battleLog().event("c4", "c4_approach", bot, "target", skills.battleLog().identity(enemy.getRootVehicle()), "mode", "single_air_pass", "orbitLimitTicks", 80);
                 mem.flightGoal = s.observed.add(s.passDirection.scale(40)); skills.warfare().release(bot); return true;
             }
         }
@@ -137,7 +163,7 @@ public final class WarfareTactics {
     }
     private static void start(State s, Entity target, Vec3 home, long now) {
         s.target = target.getUUID(); s.observed = target.getBoundingBox().getCenter(); s.velocity = target.getDeltaMovement();
-        s.home = home; s.returning = false; s.started = s.seen = now; s.nextFire = now; s.verticalTicks = s.lastVertical = 0;
+        s.home = home; s.returning = false; s.firstAttack = -1; s.pendingFire = false; s.started = s.seen = now; s.nextFire = now; s.verticalTicks = s.lastVertical = 0;
     }
     private boolean startDrone(Bot bot, LivingEntity enemy, State s, WarfareAccess.Ordnance ordnance, long now) {
         skills.warfare().release(bot);
@@ -205,6 +231,8 @@ public final class WarfareTactics {
         } else if (!remote.link(bot)) { hand.close(); return false; }
         start(s, enemy.getRootVehicle(), bot.position(), now);
         s.drone = remote; s.hand = hand; s.mode = Mode.DRONE;
+        skills.battleLog().event("drones", "drone_launch", bot, "drone", skills.battleLog().identity(remote.entity()), "target", skills.battleLog().identity(enemy.getRootVehicle()), "ammo", remote.ammo(), "firstAttackLimitTicks", 100);
+        skills.battleLog().event("drones", "drone_target", bot, "drone", skills.battleLog().identity(remote.entity()), "target", skills.battleLog().identity(enemy.getRootVehicle()));
         return true;
     }
     private ItemStack selectPayload(Bot bot, LivingEntity enemy, WarfareAccess.Ordnance ordnance) {
@@ -225,6 +253,13 @@ public final class WarfareTactics {
     }
     private boolean tickDrone(Bot bot, State s, WarfareAccess.Ordnance ordnance, long now) {
         Entity drone = s.drone.entity();
+        if (s.pendingFire && (s.drone.ammo() < s.fireAmmo || s.fireKind.equals("self_blast") && drone.isRemoved())) {
+            s.pendingFire = false; s.drops++;
+            if (s.firstAttack < 0) s.firstAttack = now;
+            skills.battleLog().event("drones", "drone_attack", bot, "drone", skills.battleLog().identity(drone), "kind", s.fireKind,
+                    "horizontalDistance", s.fireDistance, "firstAttackLatencyTicks", s.firstAttack - s.started, "durationTicks", now - s.started, "round", s.drops, "confirmedBy", s.fireKind.equals("drop") ? "native_ammo_consumed" : "native_fire_and_entity_removed");
+        }
+
         if (drone.isRemoved() || drone.level() != bot.level() || !s.drone.owned(bot) || !s.hand.active()
                 || drone.distanceTo(bot) > 128 || !MovementBounds.contains(bot, drone.position(), 4)) { cancel(bot); return false; }
         Entity target = bot.getBotLevel().getEntity(s.target);
@@ -233,8 +268,10 @@ public final class WarfareTactics {
                 && line(bot, drone.getEyePosition(), target.getBoundingBox().getCenter());
         if (observed) { s.observed = target.getBoundingBox().getCenter(); s.velocity = target.getDeltaMovement(); s.seen = now; }
         var payload = s.drone.payload();
-        if (payload == null || s.drone.ammo() == 0 || !observed && now - s.seen > 60) s.returning = true;
+        boolean wasReturning = s.returning;
+        if (payload == null || s.drone.ammo() == 0 || !observed && now - s.seen > 60 || s.firstAttack < 0 && now - s.started >= 100) s.returning = true;
         if (payload != null && payload.kamikaze() && !safeBlast(bot, s.observed, payload.radius(), target, false)) s.returning = true;
+        if (s.returning && !wasReturning) skills.battleLog().event("drones", "drone_return", bot, "drone", skills.battleLog().identity(drone), "durationTicks", now - s.started, "reason", s.firstAttack < 0 ? "first_attack_deadline_or_unsafe" : "ammo_or_target_lost");
         if (s.returning) {
             if (drone.position().distanceTo(bot.getEyePosition()) < bot.entityInteractionRange()) { cancel(bot); return false; }
             Vec3 home = MovementBounds.clamp(bot, s.home.add(0, 1.5, 0), 4);
@@ -259,10 +296,12 @@ public final class WarfareTactics {
             Vec3 impact = forecast.position();
             Vec3 predictedTarget = s.observed.add(s.velocity.scale(Math.min(25, forecast.ticks())));
             double error = SkillUtil.horizontalDistance(impact, predictedTarget);
-            boolean ready = payload.kamikaze() ? drone.position().distanceTo(s.observed) < 6.5 : error < 3.2 && drone.getY() > s.observed.y + 3;
+            boolean ready = payload.kamikaze() ? drone.position().distanceTo(s.observed) < 6.5 : error < Math.max(6.5, payload.radius() + 1) && drone.getY() > s.observed.y + 3;
             if (ready && safeBlast(bot, impact, payload.radius(), target, false)
                     && safeBlast(bot, s.observed, payload.radius(), target, false)) {
-                s.drone.fire(bot); s.drops++; s.nextFire = now + (skills.hardness(bot).level() == 10 ? 20 : skills.hardness(bot).level() == 9 ? 30 : 40);
+                s.fireAmmo = s.drone.ammo(); s.pendingFire = true; s.fireKind = payload.kamikaze() ? "self_blast" : "drop";
+                s.fireDistance = horizontal; s.drone.fire(bot);
+                s.nextFire = now + (skills.hardness(bot).level() == 10 ? 16 : skills.hardness(bot).level() == 9 ? 20 : 30);
             }
         }
         pilotDrone(bot, s, goal);
@@ -270,6 +309,7 @@ public final class WarfareTactics {
     }
     private void pilotDrone(Bot bot, State s, Vec3 goal) {
         Entity entity = s.drone.entity(); Vec3 velocity = entity.getDeltaMovement();
+        if (bot.getServer().getTickCount() % 20 == 0) skills.battleLog().event("drones", "drone_sample", bot, "drone", skills.battleLog().identity(entity), "height", entity.getY(), "vy", entity.getDeltaMovement().y, "mode", s.returning ? "return" : "attack");
         Vec3 delta = goal.subtract(entity.position());
         float yaw = SkillUtil.yawTo(entity.position(), goal);
         double yawError = Mth.wrapDegrees(yaw - entity.getYRot());
@@ -281,9 +321,11 @@ public final class WarfareTactics {
             if (forwardSpeed < desired - 0.07) keys |= 4;
             else if (forwardSpeed > desired + 0.07) keys |= 8;
         }
-        int vertical = delta.y - velocity.y * 5 > 0.5 ? 16 : delta.y - velocity.y * 5 < -0.5 ? 32 : 0;
-        if (vertical != s.lastVertical) s.verticalTicks = 0;
-        if (vertical != 0 && ++s.verticalTicks >= 6) { vertical = 0; s.verticalTicks = 0; }
+        double heightError = delta.y - velocity.y * 6;
+        int vertical = heightError > 0.5 ? 16 : heightError < -0.5 ? 32 : 0;
+        // SBW holdTickY survives an up/down reversal. A neutral tick resets it, preventing accelerating oscillation.
+        if (vertical != 0 && s.lastVertical != 0 && (vertical != s.lastVertical || s.verticalTicks >= 2)) vertical = 0;
+        s.verticalTicks = vertical == 0 ? 0 : vertical == s.lastVertical ? s.verticalTicks + 1 : 1;
         s.lastVertical = vertical;
         keys |= vertical;
         s.drone.input(bot, keys, Mth.clamp(yawError * 0.65, -20, 20), Mth.clamp(-entity.getXRot(), -8, 8));
@@ -308,16 +350,21 @@ public final class WarfareTactics {
         Vec3 predicted = s.observed.add(s.velocity.scale(Math.min(25, now - s.seen)));
         if (s.mode == Mode.C4_APPROACH) {
             if (!has(bot, "c4_bomb") || !has(bot, "detonator") || !skills.pilot().canFly(bot) || target == null || !target.isAlive()
-                    || bot.isAlliedTo(target) || target.getPassengers().stream().anyMatch(bot::isAlliedTo)) { cancel(bot); return false; }
-            if (now - s.seen > 80) { cancel(bot); return false; }
+                    || bot.isAlliedTo(target) || target.getPassengers().stream().anyMatch(bot::isAlliedTo)) { return finishC4(bot, s, "EQUIPMENT_TARGET_OR_FLIGHT_LOST"); }
+            if (now - s.seen > 80) { return finishC4(bot, s, "EQUIPMENT_TARGET_OR_FLIGHT_LOST"); }
             double distance = SkillUtil.horizontalDistance(bot.position(), predicted);
+            if (distance < 24 && s.nearSince < 0) {
+                s.nearSince = now; skills.battleLog().event("c4", "c4_orbit_start", bot, "approachTicks", now - s.started);
+            }
+            s.turnDegrees += Math.abs(Mth.wrapDegrees(bot.getYRot() - s.lastYaw)); s.lastYaw = bot.getYRot();
+            if (s.nearSince >= 0 && now - s.nearSince >= 80) return finishC4(bot, s, "ORBIT_LIMIT");
             if (distance < s.closest - 0.5) { s.closest = distance; s.progressAt = now; }
             // A missed opportunity is one failed pass, never an orbit around the same centre.
             if (bot.position().subtract(predicted).dot(s.passDirection) > 8) return finishC4(bot, s, "MISSED_PASS");
-            if (now - s.started > 120 || now - s.progressAt > 40) return finishC4(bot, s, "NO_PROGRESS");
+            if (now - s.started >= 100 || now - s.progressAt > 40) return finishC4(bot, s, "NO_PROGRESS");
             mem.flightGoal = predicted.add(s.velocity.scale(8)).add(s.passDirection.scale(40));
             skills.pilot().tick(bot, mem, enemy, now);
-            if (mem.flight == BotMemory.Flight.NONE) { cancel(bot); return false; }
+            if (mem.flight == BotMemory.Flight.NONE) { return finishC4(bot, s, "EQUIPMENT_TARGET_OR_FLIGHT_LOST"); }
             double height = bot.getEyeY() - predicted.y;
             if (bot.isGliding() && height >= 2 && height <= 14 && distance < 12 && now - s.seen <= 30) {
                 if (!safeBlast(bot, predicted, ordnance.chargeRadius(), target, true)) return finishC4(bot, s, "UNSAFE_PASS");
@@ -329,7 +376,7 @@ public final class WarfareTactics {
                 float flightYaw = bot.getYRot(), flightPitch = bot.getXRot();
                 Set<UUID> before = new HashSet<>(); ordnance.charges(bot).forEach(c -> before.add(c.getUUID()));
                 try (Hand hand = Hand.take(bot, stack)) {
-                    if (hand == null) { cancel(bot); return false; }
+                    if (hand == null) { return finishC4(bot, s, "EQUIPMENT_TARGET_OR_FLIGHT_LOST"); }
                     bot.setLook(aim.yaw(), aim.pitch());
                     CustomData.update(DataComponents.CUSTOM_DATA, stack, tag -> tag.putBoolean("Control", true));
                     stack.getItem().use(bot.level(), bot, InteractionHand.MAIN_HAND);
@@ -339,6 +386,7 @@ public final class WarfareTactics {
                 }
                 Entity charge = ordnance.charges(bot).stream().filter(c -> !before.contains(c.getUUID())).findFirst().orElse(null);
                 if (charge != null) {
+                    skills.battleLog().event("c4", "c4_throw", bot, "charge", skills.battleLog().identity(charge), "durationTicks", now - s.started, "approachTicks", s.nearSince < 0 ? now - s.started : s.nearSince - s.started, "orbitTicks", s.nearSince < 0 ? 0 : now - s.nearSince, "orbits", s.turnDegrees / 360);
                     s.charge = charge.getUUID(); s.mode = Mode.C4_EGRESS; s.placedAt = now; s.c4Result = "PLACED";
                     Vec3 travel = bot.getVelocity().multiply(1, 0, 1).normalize();
                     if (travel.lengthSqr() > 0.1) s.passDirection = travel;
@@ -346,7 +394,7 @@ public final class WarfareTactics {
             }
         } else {
             Entity charge = s.charge == null ? null : bot.getBotLevel().getEntity(s.charge);
-            if (charge == null || !has(bot, "detonator")) { cancel(bot); return false; }
+            if (charge == null || !has(bot, "detonator")) { return finishC4(bot, s, "EQUIPMENT_TARGET_OR_FLIGHT_LOST"); }
             if (now - s.placedAt > 100) return finishC4(bot, s, "EGRESS_TIMEOUT");
             // Keep the exit ahead while checking all charges. A blocked detonation never makes us circle.
             Vec3 exit = bot.position().add(s.passDirection.scale(ordnance.chargeRadius() * 2 + 30));
@@ -360,18 +408,22 @@ public final class WarfareTactics {
                 ItemStack detonator = item(bot, "detonator");
                 if (!bot.getCooldowns().isOnCooldown(detonator.getItem())) {
                     try (Hand hand = Hand.take(bot, detonator)) {
-                        if (hand == null) { cancel(bot); return false; }
+                        if (hand == null) { return finishC4(bot, s, "EQUIPMENT_TARGET_OR_FLIGHT_LOST"); }
                         detonator.getItem().use(bot.level(), bot, InteractionHand.MAIN_HAND); s.detonations++;
+                        skills.battleLog().event("c4", "c4_detonate", bot, "durationTicks", now - s.placedAt, "totalTicks", now - s.started, "ownedCharges", all.size());
                     }
                     finishC4(bot, s, "DETONATED"); return true;
                 }
             }
-            if (!bot.isGliding() && mem.flight == BotMemory.Flight.NONE) { cancel(bot); return false; }
+            if (!bot.isGliding() && mem.flight == BotMemory.Flight.NONE) { return finishC4(bot, s, "EQUIPMENT_TARGET_OR_FLIGHT_LOST"); }
         }
         return true;
     }
     private boolean finishC4(Bot bot, State s, String reason) {
-        s.c4Result = reason; cancel(bot); return false;
+        long now = bot.getServer().getTickCount();
+        s.c4Result = reason; cancel(bot);
+        s.exiting = bot.isGliding(); s.exitStarted = now;
+        return s.exiting;
     }
     private record C4Throw(float yaw, float pitch, Vec3 impact) {}
     @Nullable private static C4Throw c4Throw(Bot bot, State s, long now, double radius) {

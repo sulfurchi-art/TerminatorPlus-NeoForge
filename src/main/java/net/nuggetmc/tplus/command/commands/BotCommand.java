@@ -166,6 +166,27 @@ public class BotCommand extends CommandInstance {
         return List.of();
     }
 
+    @Command(name = "log", desc = "Enable, inspect or mark the development battle log.", autofill = "logAutofill")
+    public void log(CommandSourceStack sender, List<String> args) {
+        var log = agent().getSkills().battleLog();
+        if (args.isEmpty()) { send(sender, "用法：/bot log on|off|status|mark <文字>"); return; }
+        switch (args.getFirst().toLowerCase(Locale.ROOT)) {
+            case "on", "off" -> {
+                if (args.size() != 1) { send(sender, "用法：/bot log on|off"); return; }
+                log.toggle(args.getFirst().equalsIgnoreCase("on")); manager().saveSettings(); send(sender, log.status());
+            }
+            case "status" -> send(sender, log.status());
+            case "mark" -> {
+                if (!log.enabled()) { send(sender, "请先开启战局日志。"); return; }
+                if (args.size() < 2) { send(sender, "用法：/bot log mark <文字>"); return; }
+                log.mark(String.join(" ", args.subList(1, args.size()))); send(sender, "已记录人工标记。");
+            }
+            default -> send(sender, "用法：/bot log on|off|status|mark <文字>");
+        }
+    }
+    @Autofill
+    public List<String> logAutofill(CommandSourceStack sender, String[] args) { return args.length == 2 ? List.of("on", "off", "status", "mark") : List.of(); }
+
     @Command(name = "chatter", desc = "Reload the targeted level ten chatter files.")
     public void chatter(CommandSourceStack sender, List<String> args) {
         if (!args.equals(List.of("reload"))) { send(sender, "用法：/bot chatter reload；强度：/bot settings chatter off|mild|spicy"); return; }
