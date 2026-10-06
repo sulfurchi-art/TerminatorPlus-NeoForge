@@ -14,6 +14,27 @@ public interface WarfareAccess {
     double vehicleDamage(Entity vehicle, net.minecraft.world.entity.LivingEntity shooter, Gun gun);
     double meleeDamage(Entity vehicle, net.minecraft.world.entity.LivingEntity shooter);
     Vessel vessel(Entity entity);
+    Ordnance ordnance();
+
+    record Payload(boolean kamikaze, int capacity, double radius, double damage, Vec3 dropPosition) {}
+    interface Drone {
+        Entity entity();
+        int ammo();
+        Payload payload();
+        boolean owned(Bot bot);
+        boolean linked();
+        boolean link(Bot bot);
+        void stop(Bot bot, ItemStack monitor);
+        void input(Bot bot, int keys, double mouseX, double mouseY);
+        void fire(Bot bot);
+    }
+    interface Ordnance {
+        boolean isDrone(Entity entity);
+        Drone drone(Entity entity);
+        Payload payload(ItemStack stack);
+        java.util.List<Entity> charges(Bot bot);
+        double chargeRadius();
+    }
 
     record Specs(String type, String projectile, double damage, double armorPiercing, double velocity,
                  double gravity, double range, int magazine, int cost, int projectiles, double rpm,

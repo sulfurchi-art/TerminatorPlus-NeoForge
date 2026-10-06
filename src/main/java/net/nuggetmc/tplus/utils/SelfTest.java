@@ -985,8 +985,218 @@ public final class SelfTest {
         list.addAll(warfareFeedbackScenarios(y));
         list.addAll(warfareCooldownScenarios(y));
         list.addAll(warfareFlightFeedbackScenarios(y));
+        list.addAll(warfareOrdnanceScenarios(y));
         return list;
     }
+
+    private Bot ordnanceBot(String name, int difficulty, double x, int y, double z) {
+        Bot bot = infantry(name, difficulty, x, y, z);
+        bot.profileAbilities().put("guns", false); bot.profileAbilities().put("drones", true);
+        bot.setLook(-90, 0); return bot;
+    }
+    private void giveDrone(Bot bot, String payload, int amount) {
+        bot.giveItem(warfareItem("drone", 1)); bot.giveItem(warfareItem("monitor", 1)); bot.giveItem(warfareItem(payload, amount));
+    }
+    private Entity ownedC4Fixture(Bot owner, double x, int y, double z) {
+        try {
+            Entity e = (Entity) Class.forName("com.atsuishio.superbwarfare.entity.projectile.C4Entity")
+                    .getConstructor(LivingEntity.class, net.minecraft.world.level.Level.class, boolean.class).newInstance(owner, level, true);
+            e.setPos(x, y + 1, z); level.addFreshEntity(e); spawned.add(e); return e;
+        } catch (ReflectiveOperationException e) { throw new IllegalStateException(e); }
+    }
+    private List<Scenario> warfareOrdnanceScenarios(int y) {
+        List<Scenario> list = new ArrayList<>(); var skills = legacy().getSkills(); var tactics = skills.ordnance(); var warfare = skills.warfare();
+        boolean[] kit = {false};
+        list.add(new Scenario("warfare ordnance kits use guns bullet resistant armor and only ten has a full electric baton", () -> {
+            run("bot settings setgoal none"); Bot b = infantry("OrdnanceKits", 7, 13350.5, y, 0.5); boolean ok = true;
+            var resistance = net.minecraft.core.registries.BuiltInRegistries.ATTRIBUTE.getHolder(
+                    net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("superbwarfare", "bullet_resistance")).orElseThrow();
+            for (int i = 1; i <= 10; i++) {
+                b.setHardnessOverride(i); net.nuggetmc.tplus.bot.DefaultEquipment.apply(b, i, "warfare");
+                java.util.List<ItemStack> stacks = new ArrayList<>(b.getInventory().items);
+                ok &= stacks.stream().noneMatch(s -> s.is(Items.BOW) || s.is(Items.MACE) || s.getItem() instanceof net.minecraft.world.item.SwordItem
+                        && !net.nuggetmc.tplus.compat.WarfareItems.is(s, "electric_baton"));
+                ok &= stacks.stream().anyMatch(s -> warfare.access().isGun(s));
+                ok &= b.getItemBySlot(EquipmentSlot.HEAD).getAttributeModifiers().modifiers().stream().anyMatch(e -> e.attribute().equals(resistance) && e.modifier().amount() > 0);
+                if (i >= 3) ok &= b.getItemBySlot(EquipmentSlot.CHEST).getAttributeModifiers().modifiers().stream().anyMatch(e -> e.attribute().equals(resistance) && e.modifier().amount() > 0);
+                var baton = b.findItem(s -> net.nuggetmc.tplus.compat.WarfareItems.is(s, "electric_baton"));
+                ok &= i == 10 ? !baton.isEmpty() && baton.getCapability(net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.ITEM).getEnergyStored() == 30000 : baton.isEmpty();
+                if (i >= 8) ok &= b.countItem(warfareItem("drone", 1).getItem()) > 0 && b.countItem(warfareItem("monitor", 1).getItem()) == 1;
+            }
+            kit[0] = ok;
+        }, () -> kit[0], 20, true));
+        Bot[] batonBot = {null}; Husk[] batonTarget = {null}; ItemStack[] baton = {null}; int[] shocks = {0}; boolean[] full = {true};
+        list.add(new Scenario("warfare ordnance electric baton deals repeated native hits shocks and remains fully charged only at ten", () -> {
+            warfareFlatArena(13380, -5, 13405, 5, y); run("bot settings setgoal nearesthostile");
+            batonBot[0] = infantry("ElectricTen", 10, 13384.5, y, 0.5); batonBot[0].profileAbilities().put("guns", false);
+            baton[0] = equipGun(batonBot[0], warfareItem("electric_baton", 1)); batonBot[0].setDefaultItem(baton[0]);
+            batonTarget[0] = spawnHusk(13388.5, y, 0.5, 500, false);
+            java.util.function.Consumer<net.neoforged.neoforge.event.entity.living.LivingDamageEvent.Post> listener = event -> {
+                if (event.getEntity() == batonTarget[0] && event.getSource().getEntity() == batonBot[0] && event.getNewDamage() > 0) shocks[0]++;
+            };
+            NeoForge.EVENT_BUS.addListener(listener); scenarioHooks.add(() -> NeoForge.EVENT_BUS.unregister(listener));
+            track(() -> { if (batonBot[0].getAliveTicks() > 5) full[0] &= baton[0].getCapability(net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.ITEM).getEnergyStored() == 30000; });
+        }, () -> shocks[0] >= 2 && full[0] && batonTarget[0].getActiveEffects().stream().anyMatch(e -> e.getEffect().is(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("superbwarfare", "shock"))), 240, true));
+        Bot[] bomber = {null}; Husk[] bombTarget = {null}; java.util.Set<java.util.UUID>[] bombHits = new java.util.Set[]{null}; boolean[] nativeFlight = {false};
+        list.add(new Scenario("warfare ordnance drone deploys links flies on native inputs and drops finite owned bombs with actual damage", () -> {
+            warfareFlatArena(13420, -15, 13515, 15, y); run("bot settings setgoal nearesthostile");
+            bomber[0] = ordnanceBot("DroneBomber", 8, 13428.5, y, 0.5); giveDrone(bomber[0], "grenade_40mm", 4);
+            bombTarget[0] = spawnHusk(13472.5, y, 0.5, 500, false); bombHits[0] = capturePositiveHits(bombTarget[0]);
+            track(() -> {
+                Entity d = tactics.drone(bomber[0]);
+                if (d != null) { if (!spawned.contains(d)) spawned.add(d); nativeFlight[0] |= d.getY() > y + 4 && d.getX() > 13445 && warfare.access().ordnance().drone(d).owned(bomber[0]); }
+                if (bomber[0].getAliveTicks() % 60 == 0) LOGGER.info("[SelfTest] Drone bomb owner={} drone={} vel={} state={} targetHP={}", bomber[0].position(), d == null ? null : d.position(), d == null ? null : d.getDeltaMovement(), warfare.describe(bomber[0]), bombTarget[0].getHealth());
+            });
+        }, () -> nativeFlight[0] && tactics.drops(bomber[0]) > 0 && bombHits[0].contains(bomber[0].getUUID())
+                && bomber[0].countItem(warfareItem("grenade_40mm", 1).getItem()) == 0 && bomber[0].countItem(warfareItem("drone", 1).getItem()) == 0 && bomber[0].isAlive(), 620, true));
+        Bot[] suicide = {null}; Entity[] suicideTank = {null}; float[] initial = {0}; boolean[] linked = {false};
+        list.add(new Scenario("warfare ordnance kamikaze drone uses a real C4 payload and damages native armour without added mobility", () -> {
+            warfareFlatArena(13540, -15, 13635, 15, y); run("bot settings setgoal nearesthostile");
+            suicide[0] = ordnanceBot("DroneKamikaze", 9, 13548.5, y, 0.5); giveDrone(suicide[0], "c4_bomb", 1);
+            suicideTank[0] = spawnVehicle("m_1a_2", 13592.5, y, 0.5, 0); initial[0] = vehicleHealth(suicideTank[0]); spawnHusk(13592.5, y, 0.5, 1000, true).startRiding(suicideTank[0], true);
+            track(() -> { Entity d = tactics.drone(suicide[0]); if (d != null) { if (!spawned.contains(d)) spawned.add(d); linked[0] |= warfare.access().ordnance().drone(d).owned(suicide[0]); }
+                if (suicide[0].getAliveTicks() % 60 == 0) LOGGER.info("[SelfTest] Suicide drone={} state={} tank={}", d == null ? null : d.position(), warfare.describe(suicide[0]), vehicleHealth(suicideTank[0])); });
+        }, () -> linked[0] && tactics.drops(suicide[0]) > 0 && vehicleHealth(suicideTank[0]) < initial[0] && suicide[0].isAlive()
+                && suicide[0].countItem(warfareItem("c4_bomb", 1).getItem()) == 0, 620, true));
+        Bot[] cancelled = {null}; Husk[] cancelTarget = {null}; ItemStack[] savedMonitor = {null}; Entity[] stopped = {null}; boolean[] started = {false}; long[] disabledAt = {-1};
+        list.add(new Scenario("warfare ordnance disabling drones restores the actual monitor and resumes owned gun combat", () -> {
+            warfareFlatArena(13660, -15, 13755, 15, y); run("bot settings setgoal nearesthostile");
+            cancelled[0] = ordnanceBot("DroneAbort", 9, 13668.5, y, 0.5); giveDrone(cancelled[0], "grenade_40mm", 4);
+            savedMonitor[0] = cancelled[0].findItem(s -> net.nuggetmc.tplus.compat.WarfareItems.is(s, "monitor"));
+            equipGun(cancelled[0], loadedGun("ak_47", 30)); cancelTarget[0] = spawnHusk(13712.5, y, 0.5, 500, false);
+            track(() -> {
+                Entity d = tactics.drone(cancelled[0]);
+                if (d != null && disabledAt[0] < 0 && d.getY() > y + 3) {
+                    started[0] = cancelled[0].getMainHandItem() == savedMonitor[0]; stopped[0] = d; if (!spawned.contains(d)) spawned.add(d);
+                    cancelled[0].profileAbilities().put("drones", false); cancelled[0].profileAbilities().put("guns", true); disabledAt[0] = cancelled[0].getAliveTicks();
+                }
+            });
+        }, () -> started[0] && disabledAt[0] > 0 && cancelled[0].getAliveTicks() > disabledAt[0] + 30
+                && cancelled[0].getInventory().items.stream().anyMatch(s -> s == savedMonitor[0])
+                && !savedMonitor[0].getOrDefault(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.EMPTY).copyTag().getBoolean("Using")
+                && warfare.shots(cancelled[0]) > 0 && tactics.drone(cancelled[0]) == null && stopped[0] != null, 260, true));
+        Bot[] c4 = {null}; Entity[] c4Tank = {null}; boolean[] low = {false}; float[] c4Health = {0};
+        list.add(new Scenario("warfare ordnance finite low elytra C4 pass escapes before native remote detonation and damages armour", () -> {
+            warfareFlatArena(13780, -30, 13930, 30, y); run("bot settings setgoal nearesthostile");
+            c4[0] = ordnanceBot("LowC4", 9, 13788.5, y, 0.5); c4[0].profileAbilities().put("drones", false); c4[0].profileAbilities().put("c4", true); c4[0].profileAbilities().put("elytra", true);
+            c4[0].giveItem(new ItemStack(Items.ELYTRA)); c4[0].giveItem(new ItemStack(Items.FIREWORK_ROCKET, 16)); c4[0].giveItem(warfareItem("c4_bomb", 2)); c4[0].giveItem(warfareItem("detonator", 1));
+            c4Tank[0] = spawnVehicle("m_1a_2", 13828.5, y, 0.5, 0); c4Health[0] = vehicleHealth(c4Tank[0]); spawnHusk(13828.5, y, 0.5, 1000, true).startRiding(c4Tank[0], true);
+            run("bot settings setgoal none"); scheduler.runTaskLater(() -> { c4[0].setLook(-90, 0); run("bot settings setgoal nearesthostile"); }, 70);
+            track(() -> { var charges = warfare.access().ordnance().charges(c4[0]);
+                if (!charges.isEmpty()) { charges.forEach(c -> { if (!spawned.contains(c)) spawned.add(c); }); low[0] |= c4[0].isGliding() && c4[0].getY() < y + 13; }
+                if (c4[0].getAliveTicks() % 40 == 0) LOGGER.info("[SelfTest] Low C4 pos={} velocity={} flight={} charges={} tank={} state={}", c4[0].position(), c4[0].getVelocity(), skills.memory(c4[0]).getFlightPlan(), charges.stream().map(Entity::position).toList(), vehicleHealth(c4Tank[0]), warfare.describe(c4[0]));
+            });
+        }, () -> low[0] && tactics.detonations(c4[0]) == 1 && vehicleHealth(c4Tank[0]) < c4Health[0] && c4[0].isAlive()
+                && c4[0].countItem(warfareItem("c4_bomb", 1).getItem()) == 1 && warfare.access().ordnance().charges(c4[0]).isEmpty(), 460, true));
+        Bot[] safe = {null}, ally = {null}; Entity[] safetyTank = {null}, extra = {null}; long[] heldAt = {-1}; boolean[] held = {false};
+        list.add(new Scenario("warfare ordnance remote detonator checks every owned C4 and holds fire while another charge threatens an ally", () -> {
+            warfareFlatArena(13960, -30, 14110, 30, y); run("bot settings setgoal nearesthostile");
+            safe[0] = ordnanceBot("SafeC4", 9, 13968.5, y, 0.5); safe[0].profileAbilities().put("drones", false); safe[0].profileAbilities().put("c4", true); safe[0].profileAbilities().put("elytra", true);
+            safe[0].giveItem(new ItemStack(Items.ELYTRA)); safe[0].giveItem(new ItemStack(Items.FIREWORK_ROCKET, 16)); safe[0].giveItem(warfareItem("c4_bomb", 2)); safe[0].giveItem(warfareItem("detonator", 1));
+            ally[0] = infantry("C4Ally", 9, 13968.5, y, 3.5); ally[0].profileAbilities().put("guns", false); testTeam("c4_safe", safe[0], ally[0]);
+            safetyTank[0] = spawnVehicle("m_1a_2", 14008.5, y, 0.5, 0); spawnHusk(14008.5, y, 0.5, 1000, true).startRiding(safetyTank[0], true);
+            run("bot settings setgoal none"); scheduler.runTaskLater(() -> { safe[0].setLook(-90, 0); run("bot settings setgoal nearesthostile"); }, 70);
+            track(() -> {
+                var charges = warfare.access().ordnance().charges(safe[0]);
+                if (!charges.isEmpty() && extra[0] == null) { extra[0] = ownedC4Fixture(safe[0], 13968.5, y, 3.5); heldAt[0] = safe[0].getAliveTicks(); }
+                if (heldAt[0] > 0 && safe[0].getAliveTicks() >= heldAt[0] + 40 && !held[0]) {
+                    held[0] = tactics.detonations(safe[0]) == 0 && !extra[0].isRemoved() && ally[0].isAlive();
+                    ally[0].setPos(13965.5, y, 30.5);
+                }
+            });
+        }, () -> held[0] && tactics.detonations(safe[0]) == 1 && extra[0].isRemoved() && vehicleHealth(safetyTank[0]) < 500 && ally[0].isAlive(), 460, true));
+        Bot[] protectedBot = {null}, bareBot = {null}, armoredShooter = {null}, bareShooter = {null};
+        double[] dealt = {0, 0}; int[] bulletHits = {0, 0}; boolean[] resistanceApplied = {false};
+        list.add(new Scenario("warfare ordnance native bullet armor actually reduces damage from owned native rifle projectiles", () -> {
+            warfareFlatArena(14140, -5, 14180, 45, y); run("bot settings setgoal none");
+            protectedBot[0] = infantry("BulletArmor", 7, 14170.5, y, 0.5); bareBot[0] = infantry("BulletBare", 7, 14170.5, y, 40.5);
+            protectedBot[0].profileAbilities().put("guns", false); bareBot[0].profileAbilities().put("guns", false);
+            for (Bot v : List.of(protectedBot[0], bareBot[0])) { v.getAttribute(Attributes.MAX_HEALTH).setBaseValue(1000); v.setHealth(1000); }
+            protectedBot[0].setItemSlot(EquipmentSlot.HEAD, warfareItem("us_helmet_pasgt", 1));
+            protectedBot[0].setItemSlot(EquipmentSlot.CHEST, warfareItem("us_chest_iotv", 1)); protectedBot[0].detectEquipmentUpdates();
+            var attribute = net.minecraft.core.registries.BuiltInRegistries.ATTRIBUTE.getHolder(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("superbwarfare", "bullet_resistance")).orElseThrow();
+            resistanceApplied[0] = protectedBot[0].getAttributeValue(attribute) > 0 && bareBot[0].getAttributeValue(attribute) == 0;
+            armoredShooter[0] = infantry("ArmorRifle", 10, 14148.5, y, 0.5); bareShooter[0] = infantry("BareRifle", 10, 14148.5, y, 40.5);
+            for (Bot shooter : List.of(armoredShooter[0], bareShooter[0])) { shooter.setLook(-90, 0); equipGun(shooter, loadedGun("ak_47", 30)); }
+            java.util.function.Consumer<net.neoforged.neoforge.event.entity.living.LivingDamageEvent.Post> listener = event -> {
+                int index = event.getEntity() == protectedBot[0] ? 0 : event.getEntity() == bareBot[0] ? 1 : -1;
+                if (index >= 0 && event.getNewDamage() > 0 && event.getSource().getDirectEntity() instanceof net.minecraft.world.entity.projectile.Projectile) {
+                    dealt[index] += event.getNewDamage(); bulletHits[index]++;
+                }
+            };
+            NeoForge.EVENT_BUS.addListener(listener); scenarioHooks.add(() -> NeoForge.EVENT_BUS.unregister(listener));
+            legacy().setEnabled(false); scenarioHooks.add(() -> legacy().setEnabled(true));
+            track(() -> { if (protectedBot[0].getAliveTicks() > 75) {
+                warfare.tickInventory(armoredShooter[0], server.getTickCount()); warfare.tickInventory(bareShooter[0], server.getTickCount());
+                warfare.tick(armoredShooter[0], protectedBot[0], Vec3.ZERO, server.getTickCount());
+                warfare.tick(bareShooter[0], bareBot[0], Vec3.ZERO, server.getTickCount());
+                if (protectedBot[0].getAliveTicks() % 40 == 0) LOGGER.info("[SelfTest] Bullet armour resistance={} hitCounts={} damage={} protected={} bare={}", resistanceApplied[0], java.util.Arrays.toString(bulletHits), java.util.Arrays.toString(dealt), warfare.describe(armoredShooter[0]), warfare.describe(bareShooter[0]));
+            } });
+        }, () -> resistanceApplied[0] && bulletHits[0] >= 3 && bulletHits[1] >= 3 && dealt[0] / bulletHits[0] < dealt[1] / bulletHits[1] * 0.8, 260, true));
+        Bot[] friendBomber = {null}, friend = {null}; Husk[] friendTarget = {null}; boolean[] realControl = {false}, withheld = {true};
+        list.add(new Scenario("warfare ordnance drone withholds native bombs near an ally then releases control on difficulty downgrade", () -> {
+            warfareFlatArena(14200, -15, 14290, 15, y); run("bot settings setgoal nearesthostile");
+            friendBomber[0] = ordnanceBot("FriendlyBomber", 9, 14208.5, y, 0.5); giveDrone(friendBomber[0], "grenade_40mm", 4);
+            friend[0] = infantry("BombAlly", 9, 14254.5, y, 3.5); friend[0].profileAbilities().put("guns", false); testTeam("bomb_safe", friendBomber[0], friend[0]);
+            // Hold the allied fixture in the actual blast zone without granting it invulnerability.
+            friendTarget[0] = spawnHusk(14252.5, y, 0.5, 500, false);
+            track(() -> {
+                friend[0].setPos(14254.5, y, 3.5); friend[0].setVelocity(Vec3.ZERO);
+                Entity d = tactics.drone(friendBomber[0]);
+                if (d != null) { if (!spawned.contains(d)) spawned.add(d); realControl[0] = true; }
+                withheld[0] &= tactics.drops(friendBomber[0]) == 0 && friend[0].isAlive() && friend[0].getHealth() == 20;
+                if (friendBomber[0].getAliveTicks() == 240) friendBomber[0].setHardnessOverride(7);
+            });
+        }, () -> friendBomber[0].getAliveTicks() > 250 && realControl[0] && withheld[0] && tactics.drone(friendBomber[0]) == null
+                && friendBomber[0].getInventory().items.stream().anyMatch(s -> net.nuggetmc.tplus.compat.WarfareItems.is(s, "monitor"))
+                && !net.nuggetmc.tplus.compat.WarfareItems.is(friendBomber[0].getMainHandItem(), "monitor"), 280, true));
+        Bot[] movingBomber = {null}; Husk[] movingBombTarget = {null}; java.util.Set<java.util.UUID>[] movingBombHits = new java.util.Set[]{null}; double[] moved = {0};
+        list.add(new Scenario("warfare ordnance drone leads a moving target with the actual native twenty percent drop velocity", () -> {
+            warfareFlatArena(14330, -15, 14430, 15, y); run("bot settings setgoal nearesthostile");
+            movingBomber[0] = ordnanceBot("MovingBomber", 9, 14338.5, y, 0.5); giveDrone(movingBomber[0], "grenade_40mm", 8);
+            movingBombTarget[0] = spawnHusk(14382.5, y, 0.5, 500, false); movingBombHits[0] = capturePositiveHits(movingBombTarget[0]);
+            track(() -> {
+                long age = movingBomber[0].getAliveTicks();
+                double offset = (age % 200 < 100 ? age % 100 : 100 - age % 100) * 0.08 - 4;
+                double vz = age % 200 < 100 ? 0.08 : -0.08;
+                movingBombTarget[0].setPos(14382.5, y, 0.5 + offset); movingBombTarget[0].setDeltaMovement(new Vec3(0, 0, vz));
+                moved[0] = Math.max(moved[0], Math.abs(offset));
+                Entity d = tactics.drone(movingBomber[0]); if (d != null && !spawned.contains(d)) spawned.add(d);
+            });
+        }, () -> moved[0] > 3 && tactics.drops(movingBomber[0]) > 0 && movingBombHits[0].contains(movingBomber[0].getUUID())
+                && movingBomber[0].countItem(warfareItem("grenade_40mm", 1).getItem()) == 4, 620, true));
+        Bot[] clearedBot = {null}; Entity[] clearedDrone = {null}; boolean[] cleared = {false}; long[] clearedAt = {-1};
+        list.add(new Scenario("warfare ordnance clearing inventory releases a live remote hand and preserves no hidden payload stack", () -> {
+            warfareFlatArena(14460, -15, 14550, 15, y); run("bot settings setgoal nearesthostile");
+            clearedBot[0] = ordnanceBot("ClearDrone", 9, 14468.5, y, 0.5); giveDrone(clearedBot[0], "grenade_40mm", 4);
+            spawnHusk(14512.5, y, 0.5, 500, false);
+            track(() -> {
+                Entity d = tactics.drone(clearedBot[0]);
+                if (d != null && d.getY() > y + 3 && clearedAt[0] < 0) {
+                    clearedDrone[0] = d; spawned.add(d); clearedBot[0].clearInventory(); clearedAt[0] = clearedBot[0].getAliveTicks();
+                    cleared[0] = tactics.drone(clearedBot[0]) == null && !net.nuggetmc.tplus.compat.WarfareItems.is(clearedBot[0].getMainHandItem(), "monitor");
+                }
+            });
+        }, () -> cleared[0] && clearedAt[0] > 0 && clearedBot[0].getAliveTicks() > clearedAt[0] + 20
+                && clearedBot[0].getInventory().items.stream().skip(1).allMatch(ItemStack::isEmpty) && tactics.drone(clearedBot[0]) == null && clearedDrone[0] != null, 260, true));
+        boolean[] chargeGate = {false};
+        list.add(new Scenario("warfare ordnance baton infinite native FE stops below ten and new abilities persist with their difficulty gates", () -> {
+            run("bot settings setgoal none"); Bot b = infantry("BatonGate", 10, 14300.5, y, 0.5);
+            ItemStack batonStack = warfareItem("electric_baton", 1); b.giveItem(batonStack); batonStack = b.findItem(s -> net.nuggetmc.tplus.compat.WarfareItems.is(s, "electric_baton"));
+            net.nuggetmc.tplus.compat.WarfareItems.tickBatons(b); var energy = batonStack.getCapability(net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.ITEM);
+            boolean valid = energy.getEnergyStored() == 30000;
+            b.setHardnessOverride(9); energy.extractEnergy(2000, false); net.nuggetmc.tplus.compat.WarfareItems.tickBatons(b);
+            valid &= energy.getEnergyStored() == 28000;
+            var saved = skills.settings().save(); var restored = new net.nuggetmc.tplus.api.agent.legacyagent.skill.SkillSettings(); restored.load(saved);
+            valid &= restored.all().containsKey("drones") && restored.all().containsKey("c4")
+                    && !new net.nuggetmc.tplus.api.agent.legacyagent.skill.Hardness(7).allows("drones")
+                    && new net.nuggetmc.tplus.api.agent.legacyagent.skill.Hardness(8).allows("drones")
+                    && !new net.nuggetmc.tplus.api.agent.legacyagent.skill.Hardness(8).allows("c4")
+                    && new net.nuggetmc.tplus.api.agent.legacyagent.skill.Hardness(9).allows("c4"); chargeGate[0] = valid;
+        }, () -> chargeGate[0], 20, true));
+        return list;
+    }
+
     private List<Scenario> warfareMovementScenarios(int y) {
         List<Scenario> list = new ArrayList<>(); var warfare = legacy().getSkills().warfare();
         List<Bot> movers = new ArrayList<>(); double[] lateral = new double[7];

@@ -33,6 +33,7 @@ public class BotSkills {
     private final ChatterSystem chatter;
     private final ShieldDefense defense;
     private final net.nuggetmc.tplus.compat.WarfareSupport warfare;
+    private final WarfareTactics ordnance;
 
     public BotSkills(BotManager manager, SkillSettings settings) {
         this.manager = manager;
@@ -49,6 +50,7 @@ public class BotSkills {
         this.chatter = new ChatterSystem(manager, settings);
         this.defense = new ShieldDefense(this);
         this.warfare = new net.nuggetmc.tplus.compat.WarfareSupport(this);
+        this.ordnance = new WarfareTactics(this);
     }
 
     public SkillSettings settings() {
@@ -76,6 +78,7 @@ public class BotSkills {
     }
 
     public void forget(Terminator bot) {
+        if (bot instanceof Bot b) ordnance.forget(b);
         warfare.forget(bot);
         teams.remove(bot, now());
         chatter.forget(bot);
@@ -85,6 +88,7 @@ public class BotSkills {
     }
 
     public void clear() {
+        ordnance.clear();
         warfare.clear();
         teams.clear();
         memories.values().forEach(this::finishAttempt);
@@ -100,6 +104,7 @@ public class BotSkills {
     BowSkill bow() { return bow; }
     public ChatterSystem chatter() { return chatter; }
     public net.nuggetmc.tplus.compat.WarfareSupport warfare() { return warfare; }
+    public WarfareTactics ordnance() { return ordnance; }
     public java.util.Collection<Terminator> bots() { return manager.fetch(); }
     public void clearTeamFocus() {
         teams.clear();
@@ -296,6 +301,8 @@ public class BotSkills {
         if (enabled(bot, "totems")) {
             bot.equipTotem();
         }
+
+        if (bot instanceof Bot b && ordnance.tick(b, target, now)) { speech(bot, mem, target, now); return true; }
 
         if (bot instanceof Bot b && warfare.tickCrew(b, target, mem.targetVelocity, now)) {
             speech(bot, mem, target, now); return true;

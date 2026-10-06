@@ -1,0 +1,22 @@
+TerminatorPlus-NeoForge 4.16.0-BETA manual playtest
+Validated: 2026-10-05
+Minecraft 1.21.1 / Microsoft OpenJDK 21.0.7
+Build: SUCCESSFUL; minimum NeoForge 21.1.1
+Final native quick test: ALL 12 CHECKS PASSED
+Native runtime: NeoForge 21.1.249 / Superb Warfare 0.8.9.1 / Kotlin for Forge 5.12.0
+SBW locked source commit: 5b92ebe1da5daad9cc5e8ae28e3e06f1636f5816
+Base full regression (130 checks): NOT RERUN for this package.
+Native full regression (now 73 checks): NOT COMPLETED for this package.
+A pre-final-forecast-adjustment native run was stopped at the user's packaging request: 53 partial PASS, 0 partial FAIL ([]). It is a process log, not final-package full validation.
+An attempted quick invocation before the earlier JVM exited failed to obtain the isolated-world lock; no summary was emitted. Final quick run started after that test JVM stopped and completed all 12 checks.
+Previous 4.15 full results (129/130 base, 61/61 native) are historical only and do not certify 4.16.
+Known prior issues: same-side TeamDive synchronization; intermittent archer timeout not declared fixed.
+No production server operated, no deployment, commit or push. YSM not implemented.
+No extra native drone/vehicle movement, health or weapon damage stats; public native controls/items/explosions only.
+Native drone loading debits inventory even for ten; deployed payload capacity and per-drop debit remain native.
+New abilities: drones levels 8-10, c4 levels 9-10. Only default warfare ten has electric baton and infinite native FE.
+Jar: TerminatorPlus-NeoForge-1.21.1-4.16.0-BETA.jar
+Jar bytes: 704748
+SHA256: 0896467EE0C3D1D0248B1A35AC8BA8FDC2EA71B2519C72DB2DACCC40B45A1032
+Verified: CRC, metadata, minimum NeoForge, explicit AT, optional SBW AFTER, chatter resources, every compiled class byte (168 classes), no third-party classes/assets.
+Previous 4.14 and 4.15 JARs and 4.15 ZIP preserved with exact known SHA256.

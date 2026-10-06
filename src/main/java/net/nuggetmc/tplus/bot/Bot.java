@@ -206,6 +206,7 @@ public class Bot extends ServerPlayer implements Terminator {
     }
 
     public void prepareEquipmentPreset() {
+        ((LegacyAgent) agent).getSkills().ordnance().cancel(this);
         releaseWarfareHand();
         cancelRecoveryItem();
         lowerBow();
@@ -1185,6 +1186,7 @@ public class Bot extends ServerPlayer implements Terminator {
 
     @Override
     public void clearInventory() {
+        ((LegacyAgent) agent).getSkills().ordnance().cancel(this);
         releaseWarfareHand();
         cancelRecoveryItem();
         NonNullList<ItemStack> items = getInventory().items;
@@ -1341,6 +1343,7 @@ public class Bot extends ServerPlayer implements Terminator {
         ItemStack hand = getMainHandItem();
         getInventory().items.set(HAND_SLOT, weapon);
         if (slot >= 0) getInventory().items.set(slot, hand);
+        net.nuggetmc.tplus.compat.WarfareItems.chargeBaton(this, weapon);
         detectEquipmentUpdates();
         boolean ready = getAttackStrengthScale(0.5F) >= 0.95F;
         boolean criticals = ((LegacyAgent) agent).getSkills().enabled(this, "criticals");
@@ -1355,6 +1358,7 @@ public class Bot extends ServerPlayer implements Terminator {
             skills.beginAttempt(this, target, shieldBreak ? net.nuggetmc.tplus.api.agent.legacyagent.skill.OpponentLearning.Move.SHIELD_BREAK
                     : net.nuggetmc.tplus.api.agent.legacyagent.skill.OpponentLearning.Move.MELEE);
             attack(target);
+            net.nuggetmc.tplus.compat.WarfareItems.chargeBaton(this, weapon);
             if (shieldBreak && !target.isBlocking()) skills.onShieldBreak(this, target);
             punch();
         }

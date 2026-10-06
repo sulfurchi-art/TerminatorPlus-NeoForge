@@ -37,7 +37,8 @@ public class BotMemory {
         RECOVER,
         HUNT,
         FEINT,
-        INTERCEPT
+        INTERCEPT,
+        C4
     }
 
     // ---- progress / stuck detection ----

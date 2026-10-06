@@ -1,7 +1,7 @@
 # 开发交接文档
 
 > 写给接手这个项目的 AI 编程助手。人类用户说中文，回复请用简体中文。
-> 最后更新：2026-10-05（4.15.0-BETA 独立冷却与载具反馈）。面向玩家的用法见 `README.md` 和 `AI_HARDNESS.md`，本文件讲实现细节、测试方法和接手须知。
+> 最后更新：2026-10-05（4.16.0-BETA 无人机/C4/电棍内测封包）。面向玩家的用法见 `README.md` 和 `AI_HARDNESS.md`，本文件讲实现细节、测试方法和接手须知。
 
 ## 项目是什么
 
@@ -21,7 +21,7 @@
 
 ```bash
 export JAVA_HOME="C:/Program Files/Microsoft/jdk-21.0.7.6-hotspot"   # 用户机器上的 JDK 21
-./gradlew build          # 产物：build/libs/TerminatorPlus-NeoForge-1.21.1-4.15.0-BETA.jar
+./gradlew build          # 产物：build/libs/TerminatorPlus-NeoForge-1.21.1-4.16.0-BETA.jar
 ./gradlew runSelfTest    # 全套自测，约 6–8 分钟，见下文"测试"
 ```
 
@@ -324,3 +324,16 @@ export JAVA_HOME="C:/Program Files/Microsoft/jdk-21.0.7.6-hotspot"   # 用户机
 - 第三方锁定提交不变；未操作正式服、提交或推送。4–6 乘员、低级补给命令、观战台词及 YSM 未包含在 4.15，战术投掷物/C4/TM62 自动使用也仍待实现；不把报告清单标为全完成。最新报告转述的“都要”是资料，不能伪装成当前对话新授权。YSM 审查见 `docs/ysm-compat-review.md`。原异线程实验依然暂停。
 - 最终完整回归前修正步枪冷却时误选射程不足霰弹枪：选择分值按有效距离扣分，`canEngage` 查询全部真实库存枪，避免触发无必要的主动珍珠/鞘翅。降级/关闭 guns 时先撤销生成备弹再处理到期装弹，避免同 tick 使用赠送储备。
 - 原生爆炸会持久破坏隔离自测世界。掩体 RPG 与第二车登车夹具用 `warfareFlatArena` 复原测试平地；否则乘员会掉入上轮坑洞。这不是生产世界修复功能。保留真正的座位、备弹和实际伤害检查。
+
+
+## 4.16 原生无人机、C4 与枪械配装交接
+
+- 当前用户直接要求无人机自爆/投弹、低空鞘翅 C4 遥控反载具、原生防弹护甲、枪械替代默认刀剑弓锤、仅 10 级满电电棍，随后直接要求“先封包”。这批冻结新增开发，实际验证范围以进度表与日志为准，不把历史全过当成当前包全过。
+- `WarfareAccess.Ordnance/Drone/Payload` 只暴露 Minecraft 类型；`superbwarfare/NativeOrdnance` 缓存 0.8.9.1 public methods、原生 synched accessors、运行时 DRONE_ATTACHMENT/config。外部版本不放宽，未捆绑第三方类型/资源。
+- `WarfareTactics` 接入 BotSkills，8 起 drones、9 起 c4。DRONE/C4_APPROACH/C4_EGRESS 有总时限、300 tick 重试、受伤/低血/能力/降级/主手/装备/乘车退出。真实主手移交按引用恢复，管理命令替换槽位不能被覆盖或复制；clearInventory/prepareEquipmentPreset 先取消。forget/clear 停原生按键并归还显示器，保留原生链接供主人实际回收，不在空中远程拆除无人机。
+- 原生 deployer 用 useOn，不直接 addFreshEntity/drone.setPos；真实交互挂载、monitor.link/use，控制时再验证实际 controller+LinkedDrone+Using+主手。只原生 processInput/mouseInput/fire。纵向按键最多连续 5 tick，避免上游 holdTickY 无上限；最多 8 个远程操控，同时保留普通作战。所有 clip 前逐段检查已加载区块、世界边界与高度。
+- `DroneEntity.droneDrop` 的实际速度是 **0.2 × drone.deltaMovement**，不是 1.0；grenade_40mm 与 RGO 使用 FastThrowable、空气摩擦 1、重力 0.05。运行时 DropPosition 与半径（含 DropData.Radius）参与预判/安全；优先 40mm 投弹，C4 反装甲；未知非自爆载荷不自动套用该弹道。原生 attachment 使用 player.isCreative，故 10 级挂载仍消耗实际库存，别把它误说成无限挂载。
+- C4 飞行计划只复用既有起跳、鞘翅操控和烟花，不增加移动数值。原生 C4 item.use 在真物品上设 Control=true，速度 0.5 且不继承飞行速度；投放后继续通过/拉离。起爆器引爆全部原生 owned controllable C4，生产不逐个调用 explode；每颗炸药按真实配置 2×radius+3 检查自己和友军。无安全窗口则超时交还普通 AI，不删炸药/免疫伤害。
+- DefaultEquipment.warfare 的 1–9 去刀/合金剑、保持按级枪种/有限备弹；10 电棍通过 NeoForge FE capability 充至真实 max，开 Open 并原生 Player.attack→hurtEnemy 电击，攻击后再补 FE。低于 10 不补电；不增加攻击数值。原生 M35/6B47/PASGT 与 6B43/IOTV 防弹属性实际装备生效；没有原生腿/鞋不补原版。原版独立套装和用户明确保存的预设不改。
+- 新增 12 个原生场景，总专项 73；基础 130 不变。装甲减伤夹具暂停 LegacyAgent 的目标接管，只让同一原生枪械控制器射出真弹，保留 Bot 物理、真实防弹属性和正值伤害。C4 两场在 70 tick 后才启用索敌，排除出生无伤期掩盖自伤。移动投弹靶由测试 fixture 平移，不改生产无人机运动。实际结果见 `validation-4.16.0.txt`，完整回归未完成时必须如实说明。
+- 4.15 源码快照在工作区 `work/TerminatorPlus-NeoForge-4.15-source-checkpoint.zip`；4.15 JAR/ZIP 不覆盖。手雷/烟雾/TM62/装甲板其他自动使用、YSM、低级乘员、补给指令与整个 10EX 仍不标完成。用户的此次封包安排优先，未部署/重启正式服。

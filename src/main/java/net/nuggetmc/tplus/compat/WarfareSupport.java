@@ -81,7 +81,7 @@ public final class WarfareSupport {
         if (access == null || !access.isVehicle(entity)) throw new IllegalArgumentException("卓越前线兼容尚未启用，或实体不是载具。");
         return access.vessel(entity);
     }
-    WarfareAccess access() { return access; }
+    public WarfareAccess access() { return access; }
     public boolean tickCrew(Bot bot, @Nullable LivingEntity enemy, Vec3 velocity, long now) {
         if (access == null) return false;
         try { return crew.tick(bot, enemy, velocity, now); }
@@ -97,7 +97,7 @@ public final class WarfareSupport {
         State s = states.get(bot);
         return status + (s == null ? "" : "; shots=" + s.shots + "; coolingGuns=" + s.reloads.size() + (s.held == null ? "; hand idle" :
                 "; " + BuiltInRegistries.ITEM.getKey(s.held.stack().getItem()) + "; ammo=" + s.held.ammo()
-                        + "; reloadTicks=" + reloadRemaining(bot, s.held.stack()) + "; zoom=" + s.zoom + (s.antiRole.isEmpty() ? "" : "; antiTank=" + s.antiRole))) + crew.describe(bot);
+                        + "; reloadTicks=" + reloadRemaining(bot, s.held.stack()) + "; zoom=" + s.zoom + (s.antiRole.isEmpty() ? "" : "; antiTank=" + s.antiRole))) + crew.describe(bot) + skills.ordnance().describe(bot);
     }
     public long shots(Bot bot) { State s = states.get(bot); return s == null ? 0 : s.shots; }
     public long lastShot(Bot bot) { State s = states.get(bot); return s == null ? -1 : s.lastShot; }

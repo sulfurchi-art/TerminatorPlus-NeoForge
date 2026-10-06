@@ -164,7 +164,10 @@ class ElytraPilot {
         Float forcedPitch = null;
         boolean tactical = skills.hardness(bot).tactical();
 
-        if (mem.plan == BotMemory.FlightPlan.MACE) {
+        if (mem.plan == BotMemory.FlightPlan.C4) {
+            // Low pass/egress uses the same steering, rockets and ordinary elytra physics.
+            desiredY = Math.max(ground + 5, targetPos.y + 4);
+        } else if (mem.plan == BotMemory.FlightPlan.MACE) {
             desiredY = Math.max(targetPos.y + 14, ground + 6);
             double height = pos.y - targetPos.y;
             double horizontalSpeed = velocity.horizontalDistance();
@@ -245,7 +248,7 @@ class ElytraPilot {
 
         // hit whatever we fly past
         if (target != null && mem.plan != BotMemory.FlightPlan.RECOVER && mem.plan != BotMemory.FlightPlan.HUNT
-                && mem.plan != BotMemory.FlightPlan.FEINT && mem.plan != BotMemory.FlightPlan.INTERCEPT
+                && mem.plan != BotMemory.FlightPlan.FEINT && mem.plan != BotMemory.FlightPlan.INTERCEPT && mem.plan != BotMemory.FlightPlan.C4
                 && now >= mem.nextFlyingHit && SkillUtil.reach(entity, target) < (skills.hardness(bot).tactical() ? 3 : 3.5)) {
             bot.attackTarget(target);
             mem.nextFlyingHit = now + 10;

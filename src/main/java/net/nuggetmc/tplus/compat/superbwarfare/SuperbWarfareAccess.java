@@ -23,6 +23,8 @@ import java.util.ArrayList;
 
 /** Cached public API bindings for SBW 0.8.9.1; no compile or bundled mod dependency. */
 public final class SuperbWarfareAccess implements WarfareAccess {
+    private final WarfareAccess.Ordnance ordnance;
+    @Override public WarfareAccess.Ordnance ordnance() { return ordnance; }
     private static final String ROOT = "com.atsuishio.superbwarfare.";
     private final Class<?> gunItem, gunData, vehicle;
     private final Method from, property, tick, save, canShoot, reserve, reloading, shouldBolt, startBolt,
@@ -38,6 +40,7 @@ public final class SuperbWarfareAccess implements WarfareAccess {
     private final Method missileTarget, changeAmmo, countAmmo;
 
     public SuperbWarfareAccess() throws ReflectiveOperationException {
+        ordnance = new NativeOrdnance();
         gunItem = Class.forName(ROOT + "item.gun.GunItem");
         gunData = Class.forName(ROOT + "data.gun.GunData");
         vehicle = Class.forName(ROOT + "entity.vehicle.base.VehicleEntity");

@@ -46,6 +46,8 @@ public class SkillSettings {
         abilities.put("guns", true);         // optional SBW firearms, native ammo/reload and difficulty-based controls
         abilities.put("vehicles", true);     // boarding, seat assignments and native ground controls
         abilities.put("vehicleweapons", true);
+        abilities.put("drones", true);
+        abilities.put("c4", true);
         abilities.put("helicopters", true);  // native helicopter pilot inputs
         abilities.put("totems", true);       // a new totem in the off hand as soon as one pops
         abilities.put("retaliate", true);    // fight back against whoever hit the bot

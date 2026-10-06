@@ -56,7 +56,8 @@ public record Hardness(int level, Tuning tuning) {
             case "vehicleweapons" -> 4;
             case "helicopters" -> 9;
             case "deception", "interception" -> 10;
-            case "shield" -> 8;
+            case "shield", "drones" -> 8;
+            case "c4" -> 9;
             default -> 1;
         };
     }

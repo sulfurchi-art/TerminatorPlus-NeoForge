@@ -81,7 +81,8 @@ public final class DefaultEquipment {
         if (level < 1 || level > 10) throw new IllegalArgumentException("AI hardness must be 1–10");
         // Resolve the whole kit before replacing equipment, so a missing item never leaves a half-equipped bot.
         java.util.List<ItemStack> inventory = new java.util.ArrayList<>();
-        ItemStack blade = sbw(level >= 7 ? "cemented_carbide_sword" : "knife", 1); inventory.add(blade);
+        ItemStack blade = level == 10 ? sbw("electric_baton", 1) : ItemStack.EMPTY;
+        if (!blade.isEmpty()) { net.nuggetmc.tplus.compat.WarfareItems.chargeBaton(blade); inventory.add(blade); }
         String primary = switch (level) {
             case 1 -> "mp_443"; case 2 -> "glock_17"; case 3 -> "mp_5"; case 4 -> "ak_47";
             case 5 -> "m_4"; case 6 -> "hk_416"; case 7 -> "ak_12"; case 8 -> "qbz_191"; default -> "mk_14";
@@ -96,7 +97,11 @@ public final class DefaultEquipment {
         if (level >= 5) inventory.add(sbw("m18_smoke_grenade", level - 3));
         if (level >= 6) inventory.add(sbw("hand_grenade", level - 4));
         if (level >= 8) inventory.add(sbw("armor_plate", level - 5));
-        if (level >= 9) { inventory.add(sbw("c4_bomb", level - 7)); inventory.add(sbw("tm_62", level - 7)); inventory.add(sbw("detonator", 1)); }
+        if (level >= 9) { inventory.add(sbw("c4_bomb", level - 7)); inventory.add(sbw("detonator", 1)); }
+        if (level >= 8) {
+            inventory.add(sbw("drone", 1)); inventory.add(sbw("monitor", 1));
+            inventory.add(sbw("grenade_40mm", level == 8 ? 4 : level == 9 ? 8 : 12));
+        }
         ItemStack helmet = sbw(level <= 3 ? "ge_helmet_m_35" : level <= 7 ? "ru_helmet_6b47" : "us_helmet_pasgt", 1);
         ItemStack chest = level < 3 ? ItemStack.EMPTY : sbw(level <= 7 ? "ru_chest_6b43" : "us_chest_iotv", 1);
         bot.prepareEquipmentPreset(); bot.getInventory().clearContent();
