@@ -986,6 +986,110 @@ public final class SelfTest {
         list.addAll(warfareCooldownScenarios(y));
         list.addAll(warfareFlightFeedbackScenarios(y));
         list.addAll(warfareOrdnanceScenarios(y));
+        list.addAll(warfareNavigationScenarios(y));
+        return list;
+    }
+
+    private List<Scenario> warfareNavigationScenarios(int y) {
+        List<Scenario> list = new ArrayList<>(); var war = legacy().getSkills().warfare(); var crew = war.crew();
+        Bot[] driver = {null}; Entity[] tank = {null}; double[] lateral = {0}; boolean[] safe = {true}, planned = {false};
+        list.add(new Scenario("warfare navigation tank routes around a long wall and rejects a body-width narrow gap", () -> {
+            warfareFlatArena(14890, -60, 15020, 60, y); run("bot settings setgoal none");
+            for (int x = 14950; x <= 14951; x++) for (int z = -18; z <= 18; z++) for (int h = 0; h < 4; h++)
+                if (Math.abs(z) > 1) setBlock(x, y + h, z, Blocks.BEDROCK.defaultBlockState());
+            driver[0] = vehicleBot("WallDriver", 10, 14918.5, y, 2.5); tank[0] = spawnVehicle("m_1a_2", 14920.5, y, 0.5, -90);
+            crew.board(driver[0], tank[0], 0); crew.go(driver[0], new Vec3(14985.5, y, 0.5));
+            track(() -> {
+                lateral[0] = Math.max(lateral[0], Math.abs(tank[0].getZ())); safe[0] &= vehicleHealth(tank[0]) >= 490 && tank[0].getY() >= y - 0.5;
+                planned[0] |= war.describe(driver[0]).contains("DRIVING_ROUTE");
+                if (driver[0].getAliveTicks() % 100 == 0) LOGGER.info("[SelfTest] Wall route pos={} nativeHealth={} state={} expandedPeak={}", tank[0].position(), vehicleHealth(tank[0]), war.describe(driver[0]), crew.navigationPeakExpansions());
+            });
+        }, () -> tank[0].getX() > 14970 && lateral[0] > 23 && safe[0] && planned[0] && crew.navigationPeakExpansions() <= 24
+                && driver[0].getVehicle() == tank[0], 1500, true));
+        Bot[] ditchDriver = {null}; Entity[] ditchTank = {null}; double[] detour = {0}; boolean[] dry = {true};
+        list.add(new Scenario("warfare navigation tank avoids a water-filled trench with track support checks", () -> {
+            warfareFlatArena(15100, -50, 15220, 50, y); run("bot settings setgoal none");
+            for (int x = 15150; x <= 15154; x++) for (int z = -12; z <= 12; z++) for (int h = 1; h <= 3; h++)
+                setBlock(x, y - h, z, Blocks.WATER.defaultBlockState());
+            ditchDriver[0] = vehicleBot("DitchDriver", 10, 15118.5, y, 2.5); ditchTank[0] = spawnVehicle("m_1a_2", 15120.5, y, 0.5, -90);
+            crew.board(ditchDriver[0], ditchTank[0], 0); crew.go(ditchDriver[0], new Vec3(15190.5, y, 0.5));
+            track(() -> { dry[0] &= ditchTank[0].getY() >= y - 0.5 && vehicleHealth(ditchTank[0]) >= 490;
+                detour[0] = Math.max(detour[0], Math.abs(ditchTank[0].getZ()));
+                if (ditchDriver[0].getAliveTicks() % 150 == 0) LOGGER.info("[SelfTest] Ditch route pos={} dry={} state={}", ditchTank[0].position(), dry[0], war.describe(ditchDriver[0])); });
+        }, () -> ditchTank[0].getX() > 15172 && detour[0] > 17 && dry[0] && ditchDriver[0].getVehicle() == ditchTank[0], 1500, true));
+        Bot[] first = {null}, second = {null}; Entity[] convoy = new Entity[2]; boolean[] yielding = {false}, intact = {true}; double[] lanes = {0};
+        list.add(new Scenario("warfare navigation opposed allied tanks yield pass and retain native health", () -> {
+            warfareFlatArena(15470, -50, 15630, 50, y); run("bot settings setgoal none");
+            first[0] = vehicleBot("RoadEast", 10, 15508.5, y, 2.5); second[0] = vehicleBot("RoadWest", 10, 15577.5, y, 2.5);
+            testTeam("road_friends", first[0], second[0]); convoy[0] = spawnVehicle("m_1a_2", 15510.5, y, 0.5, -90); convoy[1] = spawnVehicle("m_1a_2", 15575.5, y, 0.5, 90);
+            crew.board(first[0], convoy[0], 0); crew.board(second[0], convoy[1], 0);
+            crew.go(first[0], new Vec3(15598.5, y, 0.5)); crew.go(second[0], new Vec3(15495.5, y, 0.5));
+            track(() -> { yielding[0] |= war.describe(first[0]).contains("PASS_TEAM") || war.describe(second[0]).contains("PASS_TEAM");
+                intact[0] &= vehicleHealth(convoy[0]) >= 490 && vehicleHealth(convoy[1]) >= 490;
+                lanes[0] = Math.max(lanes[0], Math.max(Math.abs(convoy[0].getZ()), Math.abs(convoy[1].getZ())));
+                if (first[0].getAliveTicks() % 150 == 0) LOGGER.info("[SelfTest] Convoy east={} {} west={} {} health={},{}", convoy[0].position(), war.describe(first[0]), convoy[1].position(), war.describe(second[0]), vehicleHealth(convoy[0]), vehicleHealth(convoy[1])); });
+        }, () -> convoy[0].getX() > 15580 && convoy[1].getX() < 15505 && lanes[0] > 10 && yielding[0] && intact[0]
+                && first[0].getVehicle() == convoy[0] && second[0].getVehicle() == convoy[1], 1600, true));
+        Bot[] anchor = {null}, flank = {null}; Entity[] armor = new Entity[3]; boolean[] cooperation = {false}; java.util.Set<java.util.UUID>[] owners = new java.util.Set[]{null};
+        list.add(new Scenario("warfare navigation allied armor spreads against an enemy tank and fires native damaging shells", () -> {
+            warfareFlatArena(15650, -80, 15835, 80, y); run("bot settings setgoal nearesthostile");
+            anchor[0] = vehicleBot("ArmorOne", 10, 15678.5, y, -8.5); flank[0] = vehicleBot("ArmorTwo", 10, 15678.5, y, 10.5);
+            testTeam("armor_friends", anchor[0], flank[0]);
+            anchor[0].profileAbilities().put("teamwork", true); flank[0].profileAbilities().put("teamwork", true);
+            armor[0] = spawnVehicle("m_1a_2", 15680.5, y, -10.5, -90); armor[1] = spawnVehicle("m_1a_2", 15680.5, y, 10.5, -90);
+            armor[2] = spawnVehicle("m_1a_2", 15740.5, y, 0.5, 90);
+            crew.board(anchor[0], armor[0], 0); crew.board(flank[0], armor[1], 0);
+            spawnHusk(15740.5, y, 0.5, 10000, true).startRiding(armor[2], true); owners[0] = captureNativeOwners(List.of(anchor[0], flank[0]));
+            track(() -> { cooperation[0] |= war.describe(anchor[0]).contains("TEAM_FLANK") || war.describe(flank[0]).contains("TEAM_FLANK");
+                if (anchor[0].getAliveTicks() % 100 == 0) LOGGER.info("[SelfTest] Armor fight one={} two={} targetHealth={} owners={}", war.describe(anchor[0]), war.describe(flank[0]), vehicleHealth(armor[2]), owners[0]); });
+        }, () -> cooperation[0] && owners[0].contains(anchor[0].getUUID()) && owners[0].contains(flank[0].getUUID()) && vehicleHealth(armor[2]) < 500
+                && vehicleHealth(armor[0]) > 0 && vehicleHealth(armor[1]) > 0 && Math.abs(armor[0].getZ() - armor[1].getZ()) > 15, 900, true));
+        Bot[] pilot = {null}; Entity[] aircraft = {null}; double[] heightAtWall = {0}; boolean[] flyingSafe = {true}, avoiding = {false};
+        list.add(new Scenario("warfare navigation helicopter sweeps its flight volume before a tall wall and clears it natively", () -> {
+            warfareFlatArena(15860, -60, 16020, 60, y); run("bot settings setgoal none");
+            for (int x = 15930; x <= 15931; x++) for (int z = -20; z <= 20; z++) for (int h = 0; h < 19; h++)
+                setBlock(x, y + h, z, Blocks.BEDROCK.defaultBlockState());
+            pilot[0] = vehicleBot("WallPilot", 10, 15888.5, y, 2.5); aircraft[0] = spawnVehicle("ah_6", 15890.5, y, 0.5, -90);
+            crew.board(pilot[0], aircraft[0], 0); crew.go(pilot[0], new Vec3(15980.5, y, 0.5));
+            track(() -> { flyingSafe[0] &= vehicleHealth(aircraft[0]) >= 245;
+                if (aircraft[0].getX() > 15925 && aircraft[0].getX() < 15938) heightAtWall[0] = Math.max(heightAtWall[0], aircraft[0].getY() - y);
+                avoiding[0] |= war.describe(pilot[0]).contains("vehiclePilot=AVOID");
+                if (pilot[0].getAliveTicks() % 150 == 0) LOGGER.info("[SelfTest] Flight wall pos={} nativeHealth={} heightAtWall={} state={}", aircraft[0].position(), vehicleHealth(aircraft[0]), heightAtWall[0], war.describe(pilot[0])); });
+        }, () -> aircraft[0].getX() > 15955 && heightAtWall[0] > 20 && avoiding[0] && flyingSafe[0] && pilot[0].getVehicle() == aircraft[0], 1600, true));
+        List<Bot> planners = new ArrayList<>(); List<Entity> bodies = new ArrayList<>();
+        list.add(new Scenario("warfare navigation six native tanks share bounded fair planning and all complete a detour", () -> {
+            warfareFlatArena(16100, -30, 16230, 230, y); run("bot settings setgoal none");
+            for (int i = 0; i < 6; i++) {
+                int lane = i * 40;
+                for (int z = lane - 8; z <= lane + 8; z++) for (int h = 0; h < 4; h++) setBlock(16150, y + h, z, Blocks.BEDROCK.defaultBlockState());
+                Bot b = vehicleBot("Planner" + i, 10, 16118.5, y, lane + 2.5); Entity body = spawnVehicle("m_1a_2", 16120.5, y, lane + 0.5, -90);
+                planners.add(b); bodies.add(body); crew.board(b, body, 0); crew.go(b, new Vec3(16195.5, y, lane + 0.5));
+            }
+            track(() -> { if (planners.getFirst().getAliveTicks() % 200 == 0) LOGGER.info("[SelfTest] Fair planners peak={} states={}", crew.navigationPeakExpansions(), planners.stream().map(b -> b.getVehicle().position() + " " + war.describe(b)).toList()); });
+        }, () -> crew.navigationPeakExpansions() > 6 && crew.navigationPeakExpansions() <= 24
+                && bodies.stream().allMatch(body -> body.getX() > 16172 && vehicleHealth(body) >= 490)
+                && planners.stream().allMatch(Bot::isPassenger), 1800, true));
+        List<Bot> airPair = new ArrayList<>(); List<Entity> airBodies = new ArrayList<>();
+        Husk[] persistentAirTarget = {null}; java.util.Set<java.util.UUID>[] airHits = new java.util.Set[]{null}; boolean[] lane = {false}, apart = {true}, disabled = {false}; double[] airHeight = new double[2];
+        list.add(new Scenario("warfare navigation allied helicopters separate attack lanes hit with native weapons and release teamwork", () -> {
+            warfareFlatArena(16300, -100, 16500, 100, y); run("bot settings setgoal nearesthostile");
+            for (int i = 0; i < 2; i++) {
+                Bot b = vehicleBot("PairPilot" + i, 10, 16338.5, y, -14.5 + i * 30); b.profileAbilities().put("teamwork", true); airPair.add(b);
+                Entity body = spawnVehicle("ah_6", 16340.5, y, -14.5 + i * 30, -90); airBodies.add(body); crew.board(b, body, 0);
+            }
+            testTeam("air_pair", airPair.toArray(Bot[]::new)); persistentAirTarget[0] = spawnHusk(16440.5, y, 0.5, 10000, false); airHits[0] = capturePositiveHits(persistentAirTarget[0]);
+            track(() -> {
+                if (persistentAirTarget[0].isAlive()) persistentAirTarget[0].setHealth(persistentAirTarget[0].getMaxHealth());
+                for (int i = 0; i < 2; i++) airHeight[i] = Math.max(airHeight[i], airBodies.get(i).getY() - y);
+                lane[0] |= airPair.stream().anyMatch(b -> war.describe(b).contains("TEAM_AIR_APPROACH"));
+                if (airBodies.stream().allMatch(body -> body.getY() > y + 5)) apart[0] &= airBodies.get(0).position().distanceTo(airBodies.get(1).position()) > 8;
+                if (airPair.getFirst().getAliveTicks() == 320) airPair.forEach(b -> b.profileAbilities().put("teamwork", false));
+                if (airPair.getFirst().getAliveTicks() > 330) disabled[0] |= airPair.stream().noneMatch(b -> war.describe(b).contains("TEAM_AIR_APPROACH"));
+                if (airPair.getFirst().getAliveTicks() % 160 == 0) LOGGER.info("[SelfTest] Air pair lanes={} apart={} hits={} pilots={}", lane[0], apart[0], airHits[0], airPair.stream().map(b -> b.position() + " " + war.describe(b)).toList());
+            });
+        }, () -> lane[0] && apart[0] && disabled[0] && airHeight[0] > 6 && airHeight[1] > 6
+                && airHits[0].contains(airPair.get(0).getUUID()) && airHits[0].contains(airPair.get(1).getUUID())
+                && airBodies.stream().allMatch(body -> vehicleHealth(body) > 0), 1400, true));
         return list;
     }
 

@@ -16,11 +16,23 @@ import net.nuggetmc.tplus.compat.WarfareAccess.Vessel;
 import javax.annotation.Nullable;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Comparator;
+import net.nuggetmc.tplus.api.agent.legacyagent.skill.BotSkills;
 
 /** Feedback controls emit native keys and mouse motion, never position, rotation or velocity writes. */
 final class VehiclePilot {
     private static final class Flight {
-        Vec3 waypoint, home, extend, retreat, lastEnemy, antiAirEntry, separation;
+        final Entity vehicle;
+        Flight(Entity vehicle) { this.vehicle = vehicle; }
+        Vec3 waypoint, home, extend, retreat, lastEnemy, antiAirEntry, separation, tactical, tacticalEnemy, trafficGoal, airEntry;
+        final VehicleNavigation.Route route = new VehicleNavigation.Route();
+        Bot driver; String engine; boolean cooperative, weaponReady;
+        double combatRange = 48, minimumRange = 18;
+        long tacticalUntil, nextTrafficScan, trafficUntil, yieldUntil;
+        int tacticalTarget = -1, airTarget = -1;
+        List<Entity> allies = List.of();
         long nextSeparation;
         int antiAirTarget = -1;
         long seenAt = -1000, hurtUntil, nextDecoy, orbitUntil; float health = -1; boolean antiAir; int pass;
@@ -31,29 +43,35 @@ final class VehiclePilot {
         boolean sampled, aiming; float aimYaw, aimPitch;
     }
     private final WarfareSupport warfare;
-    VehiclePilot(WarfareSupport warfare) { this.warfare = warfare; }
+    private final BotSkills skills;
+    private final VehicleNavigation navigation = new VehicleNavigation();
+    VehiclePilot(WarfareSupport warfare, BotSkills skills) { this.warfare = warfare; this.skills = skills; }
+    int peakExpansions() { return navigation.peakExpansions(); }
     private final Map<Entity, Flight> flights = new HashMap<>();
 
     void go(Vessel vessel, Vec3 point) {
-        Flight f = flights.computeIfAbsent(vessel.entity(), v -> new Flight());
-        f.waypoint = point; f.extend = null; f.attackSince = -1;
+        Flight f = flights.computeIfAbsent(vessel.entity(), Flight::new);
+        f.waypoint = point; f.extend = null; f.attackSince = -1; f.route.reset(); f.trafficGoal = null;
     }
-    void forget(Entity vessel) { flights.remove(vessel); }
-    void clear() { flights.clear(); }
-    String describe(Entity vessel) { Flight f = flights.get(vessel); return f == null ? "IDLE" : f.phase; }
+    void forget(Entity vessel) { flights.remove(vessel); navigation.forget(vessel); }
+    void clear() { flights.clear(); navigation.clear(); }
+    String describe(Entity vessel) { Flight f = flights.get(vessel); return f == null ? "IDLE" : f.phase + " nav=" + f.route.state + "/" + f.route.expanded; }
     boolean hasWaypoint(Entity vessel) { Flight f = flights.get(vessel); return f != null && f.waypoint != null; }
 
     boolean tick(Bot bot, Vessel vessel, @Nullable LivingEntity enemy, long now, boolean land, boolean waitForCrew) {
         Entity e = vessel.entity();
-        Flight f = flights.computeIfAbsent(e, v -> new Flight());
+        Flight f = flights.computeIfAbsent(e, Flight::new);
         if (f.home == null) f.home = e.position();
-        f.lastTick = now;
+        f.lastTick = now; f.driver = bot; f.engine = vessel.engine();
+        f.cooperative = skills.enabled(bot, "teamwork") && bot.getTeam() != null;
         int id = enemy == null ? -1 : enemy.getId();
         if (id != f.threatId || now >= f.threatAt) {
+            if (f.threatId != id) f.retreat = null;
             f.threatId = id; f.threatAt = now + 20;
             f.dangerous = enemy != null && warfare.canThreaten(vessel, enemy);
             f.antiAir = enemy != null && warfare.antiAirThreat(vessel, enemy);
             if (!f.dangerous) f.retreat = null;
+            if (enemy != null && warfare.isVehicle(enemy.getRootVehicle())) weaponEnvelope(bot, vessel, enemy.getRootVehicle(), f);
         }
         if (enemy != null) { f.lastEnemy = enemy.getRootVehicle().position(); f.seenAt = now; }
         if (f.health > 0 && vessel.health() < f.health) f.hurtUntil = now + 80;
@@ -76,8 +94,37 @@ final class VehiclePilot {
             Vec3 delta = enemy.position().subtract(e.position()).multiply(1, 0, 1);
             if (retreat) {
                 f.phase = "RETREAT";
-                if (f.retreat == null) f.retreat = MovementBounds.clamp(e, e.position().subtract(delta.normalize().scale(24)), 8);
+                if (f.retreat == null) f.retreat = cover(vessel, enemy, delta);
                 goal = f.retreat;
+            } else if (warfare.isVehicle(enemy.getRootVehicle()) && bot.hardness().level() >= 8) {
+                Vec3 predicted = enemy.getRootVehicle().position().add(enemy.getRootVehicle().getDeltaMovement().scale(8));
+                if (delta.horizontalDistance() < f.minimumRange) {
+                    f.phase = "STANDOFF"; goal = e.position().subtract(delta.normalize().scale(f.minimumRange + 8 - delta.horizontalDistance()));
+                } else if (!f.weaponReady && f.dangerous && f.hurtUntil > f.lastTick) {
+                    if (f.retreat == null) f.retreat = cover(vessel, enemy, delta);
+                    f.phase = "RELOAD_COVER"; goal = f.retreat;
+                } else {
+                    List<Flight> group = formation(f);
+                    int rank = group.indexOf(f);
+                    if (rank > 0) {
+                        if (f.tactical == null || f.tacticalTarget != enemy.getId() || f.lastTick >= f.tacticalUntil
+                                || f.tacticalEnemy.distanceToSqr(predicted) > 144) {
+                            Vec3 away = group.getFirst().driver.getVehicle().position().subtract(predicted).multiply(1, 0, 1).normalize();
+                            int side = rank % 2 == 0 ? 1 : -1;
+                            double flank = Math.min(40, 22 + rank * 6);
+                            Vec3 candidate = predicted.add(away.scale(Math.max(28, f.combatRange * 0.65)))
+                                    .add(-away.z * flank * side, 0, away.x * flank * side);
+                            f.tactical = MovementBounds.clamp(e, candidate, 8); f.tacticalEnemy = predicted;
+                            f.tacticalTarget = enemy.getId(); f.tacticalUntil = f.lastTick + 100;
+                        }
+                        f.phase = "TEAM_FLANK"; goal = f.tactical;
+                        if (e.position().subtract(goal).horizontalDistance() < 6 && clearLine(e, e.getBoundingBox().getCenter(), enemy.getRootVehicle().getBoundingBox().getCenter())) {
+                            f.phase = "SUPPORT_FIRE"; vessel.input(bot, 16, 0, 0); return;
+                        }
+                    } else if (delta.horizontalDistance() > f.combatRange || !clearLine(e, e.getBoundingBox().getCenter(), enemy.getRootVehicle().getBoundingBox().getCenter())) {
+                        f.phase = "ARMOR_APPROACH"; goal = predicted.subtract(delta.normalize().scale(f.combatRange * 0.65));
+                    } else { f.phase = group.size() > 1 ? "TEAM_ANCHOR" : "FIRING_POSITION"; vessel.input(bot, 16, 0, 0); return; }
+                }
             } else if (!warfare.isVehicle(enemy.getRootVehicle()) && (f.separation != null || f.lastTick >= f.nextSeparation
                     && delta.lengthSqr() < 36 && (delta.lengthSqr() < 1 || enemy.getY() > e.getY() + e.getBbHeight() * 0.5))) {
                 if (f.separation == null) f.separation = MovementBounds.clamp(e, e.position().add(e.getLookAngle().multiply(1, 0, 1).normalize().scale(14)), 8);
@@ -103,13 +150,38 @@ final class VehiclePilot {
             f.waypoint = null; if (f.separation != null) { f.separation = null; f.nextSeparation = f.lastTick + 60; }
             f.phase = retreat ? "HOLD_COVER" : "ARRIVED"; vessel.input(bot, 16, 0, 0); return;
         }
-        Vec3 route = groundRoute(e, delta);
-        if (route == null) { f.phase = "OBSTRUCTED"; vessel.input(bot, 16, 0, 0); return; }
+        Vec3 original = goal;
+        goal = traffic(vessel, f, goal, f.lastTick);
+        if (f.lastTick < f.yieldUntil) { f.phase = "YIELD_TEAM"; vessel.input(bot, 16, 0, 0); return; }
+        if (f.lastTick < f.route.reverseUntil) {
+            Vec3 rear = e.position().subtract(e.getLookAngle().multiply(1, 0, 1).normalize()
+                    .scale(Mth.clamp(4 + e.getDeltaMovement().horizontalDistance() * 20, 4, 12)));
+            if (VehicleNavigation.sweepFacing(vessel, e.position(), rear, e.getYRot()) && clearTraffic(e, f, rear)) {
+                f.phase = "REVERSE_RECOVERY"; vessel.input(bot, 8, 0, 0); return;
+            }
+            f.route.reverseUntil = 0; f.phase = "REVERSE_BLOCKED"; vessel.input(bot, 16, 0, 0); return;
+        }
+        Vec3 route = navigation.guide(vessel, f.route, goal, f.lastTick);
+        if (f.route.progress == null || e.position().subtract(f.route.progress).horizontalDistance() > 1.2) {
+            f.route.progress = e.position(); f.route.progressAt = f.lastTick;
+        }
+        if (route == null && f.route.state.equals("PLANNING")) f.route.progressAt = f.lastTick;
+        if (f.lastTick >= f.route.nextReverse && f.lastTick - f.route.progressAt > 100 && !f.route.state.equals("PLANNING")) {
+            Vec3 rear = e.position().subtract(e.getLookAngle().multiply(1, 0, 1).normalize().scale(5));
+            if (VehicleNavigation.sweepFacing(vessel, e.position(), rear, e.getYRot()) && clearTraffic(e, f, rear)) {
+                f.route.reverseUntil = f.lastTick + 25; f.route.nextReverse = f.lastTick + 120; f.route.reset();
+            }
+            f.route.progressAt = f.lastTick;
+        }
+        if (f.lastTick < f.route.reverseUntil) { f.phase = "REVERSE_RECOVERY"; vessel.input(bot, 8, 0, 0); return; }
+        if (route == null) { f.phase = f.route.state.equals("PLANNING") ? "ROUTE_PLANNING" : "OBSTRUCTED"; vessel.input(bot, 16, 0, 0); return; }
         float yaw = yaw(route), error = Mth.wrapDegrees(yaw - e.getYRot());
         int keys = error > 4 ? 2 : error < -4 ? 1 : 0;
         if (Math.abs(error) < 85) keys |= 4; else keys |= 16;
         if (Math.abs(error) > 50 && e.getDeltaMovement().horizontalDistance() > 0.12) keys |= 16;
-        if (f.waypoint != null) f.phase = "DRIVING";
+        if (f.waypoint != null) f.phase = f.route.state.equals("ROUTE") ? "DRIVING_ROUTE" : "DRIVING";
+        if (goal != original) f.phase = "PASS_TEAM";
+        if (goal != original && Math.abs(error) > 30 || !clearTraffic(e, f, coasting)) keys = (keys & ~4) | 16;
         if (vessel.threatened()) keys |= 64;
         vessel.input(bot, keys, 0, 0);
     }
@@ -191,6 +263,21 @@ final class VehiclePilot {
             if (goal == null) goal = f.home.add(0, 18, 0);
             f.phase = landing ? "LANDING" : "HOLD";
         }
+        List<Flight> group = formation(f);
+        int rank = group.indexOf(f);
+        if (!landing && f.waypoint == null && enemy != null && rank > 0 && !incoming && f.extend == null && now >= f.orbitUntil) {
+            if (f.airTarget != enemy.getId()) {
+                Vec3 away = group.getFirst().driver.getVehicle().position().subtract(enemy.position()).multiply(1, 0, 1).normalize();
+                int side = rank % 2 == 0 ? 1 : -1;
+                f.airEntry = MovementBounds.clamp(e, enemy.position().add(away.scale(60))
+                        .add(-away.z * side * (25 + rank * 5), 18 + rank * 12, away.x * side * (25 + rank * 5)), 15);
+                f.airTarget = enemy.getId();
+            }
+            if (f.airEntry != null && pos.subtract(f.airEntry).horizontalDistance() < 12) f.airEntry = null;
+            if (f.airEntry != null) { goal = f.airEntry; f.phase = "TEAM_AIR_APPROACH"; }
+        }
+        if (!landing && !incoming && rank > 0 && enemy != null && !f.phase.equals("TEAM_AIR_APPROACH")) goal = goal.add(0, Math.min(24, rank * 10), 0);
+        goal = airSpacing(vessel, f, goal, now, landing);
         goal = MovementBounds.clamp(e, goal, 12 + motion.horizontalDistance() * 20);
         Vec3 predicted = pos.add(motion.multiply(25, 0, 25));
         if (!MovementBounds.contains(e, predicted, 8)) {
@@ -203,8 +290,17 @@ final class VehiclePilot {
         desiredAltitude = Math.min(e.level().getMaxBuildHeight() - 10, desiredAltitude);
         if (!landing && !incoming && pos.y < ground + 7) f.phase = "TAKEOFF";
         Vec3 ahead = pos.add(motion.multiply(10, 0, 10)).add(e.getLookAngle().multiply(6, 0, 6));
-        boolean obstructed = !flightClear(e, ahead);
-        if (obstructed) { desiredAltitude = Math.max(desiredAltitude, pos.y + 7); f.phase = "AVOID"; }
+        boolean obstructed = !flightSweep(vessel, pos, ahead);
+        if (obstructed) {
+            desiredAltitude = Math.max(desiredAltitude, pos.y + 7); f.phase = "AVOID";
+            Vec3 raised = ahead.add(0, 8, 0);
+            if (!flightSweep(vessel, pos.add(0, 3, 0), raised)) {
+                Vec3 right = e.getLookAngle().multiply(1, 0, 1).normalize().yRot((float) -Math.PI / 2);
+                Vec3 escape = pos.add(right.scale(12)).add(0, 7, 0);
+                if (!flightSweep(vessel, pos, escape)) escape = pos.subtract(right.scale(12)).add(0, 7, 0);
+                if (flightSweep(vessel, pos, escape)) { delta = escape.subtract(pos); horizontal = delta.horizontalDistance(); }
+            }
+        }
         float desiredYaw = horizontal > 3 ? yaw(delta) : e.getYRot();
         float yawError = Mth.wrapDegrees(desiredYaw - e.getYRot());
         double speed = motion.dot(e.getLookAngle().multiply(1, 0, 1).normalize());
@@ -245,32 +341,116 @@ final class VehiclePilot {
         int keys = !vessel.engineStarted() && !landing || liftError > 0.025 ? 4 : liftError < -0.025 ? 32 : 0;
         double rollError = -vessel.roll() - rollRate * 5 - mouseX * 0.015;
         if (rollError > 2) keys |= 2; else if (rollError < -2) keys |= 1;
-        boolean hover = landing || f.phase.equals("HOLD");
+        boolean hover = landing || f.phase.equals("HOLD") || f.phase.equals("AIR_SEPARATION");
         if (!e.onGround() && vessel.hovering() != hover) keys |= 16;
         if (incoming && now >= f.nextDecoy && vessel.decoys() > 0) { keys |= 64; f.nextDecoy = now + 40; }
         vessel.input(bot, keys, mouseX, mouseY);
         return landing && e.onGround();
     }
 
+    private List<Flight> formation(Flight self) {
+        if (!self.cooperative || self.threatId < 0) return List.of(self);
+        return flights.values().stream().filter(f -> f.driver != null && f.cooperative && f.threatId == self.threatId
+                && skills.enabled(f.driver, "teamwork") && self.lastTick - f.lastTick <= 20 && self.driver.level() == f.driver.level() && f.driver.isAlive()
+                && f.driver.getVehicle() == f.vehicle && warfare.isVehicle(f.vehicle) && warfare.vessel(f.vehicle).passenger(0) == f.driver && self.driver.isAlliedTo(f.driver) && self.engine.equals(f.engine)
+                && self.driver.position().distanceToSqr(f.driver.position()) < 160 * 160)
+                .sorted(Comparator.comparing(f -> f.driver.getVehicle().getUUID())).toList();
+    }
+    private void weaponEnvelope(Bot bot, Vessel vessel, Entity target, Flight f) {
+        f.weaponReady = false; f.combatRange = 48; f.minimumRange = 18;
+        for (var seat : vessel.seats()) if (vessel.passenger(seat.index()) instanceof Bot gunner && skills.enabled(gunner, "vehicleweapons")) {
+            for (var weapon : vessel.weapons(gunner)) {
+                var gun = vessel.weaponGun(gunner, weapon.index());
+                if (gun == null || warfare.access().vehicleDamage(target, gunner, gun) <= 0) continue;
+                f.weaponReady |= weapon.ready();
+                f.combatRange = Math.max(f.combatRange, Math.min(80, weapon.specs().range() * 0.6));
+                f.minimumRange = Math.max(f.minimumRange, weapon.specs().explosionRadius() * 2 + 6);
+            }
+        }
+    }
+    private static Vec3 cover(Vessel vessel, LivingEntity enemy, Vec3 delta) {
+        Entity e = vessel.entity(); Vec3 away = delta.multiply(1, 0, 1).normalize();
+        Vec3 fallback = MovementBounds.clamp(e, e.position().subtract(away.scale(20)), 8);
+        for (int degrees : new int[]{0, 45, -45, 90, -90}) {
+            Vec3 point = e.position().subtract(away.yRot((float) Math.toRadians(degrees)).scale(18));
+            if (VehicleNavigation.site(vessel, point, e.getYRot()) != null
+                    && !clearLine(e, point.add(0, 1.5, 0), enemy.getRootVehicle().getBoundingBox().getCenter())) return point;
+        }
+        return fallback;
+    }
+    private void scanTraffic(Vessel vessel, Flight f, long now) {
+        if (now < f.nextTrafficScan) return;
+        f.nextTrafficScan = now + 10;
+        f.allies = vessel.entity().level().getEntities(vessel.entity(), vessel.entity().getBoundingBox().inflate(vessel.engine().equals("HELICOPTER") ? 80 : 40), other -> warfare.isVehicle(other)
+                && other.getPassengers().stream().anyMatch(f.driver::isAlliedTo));
+    }
+    private Vec3 traffic(Vessel vessel, Flight f, Vec3 goal, long now) {
+        Entity e = vessel.entity(); scanTraffic(vessel, f, now);
+        if (f.trafficGoal != null && now < f.trafficUntil && e.position().distanceToSqr(f.trafficGoal) > 25) return f.trafficGoal;
+        f.trafficGoal = null;
+        Vec3 forward = goal.subtract(e.position()).multiply(1, 0, 1).normalize();
+        for (Entity other : f.allies) {
+            if (other.isRemoved() || other.level() != e.level() || Math.abs(other.getY() - e.getY()) > 6
+                    || other.getPassengers().stream().noneMatch(f.driver::isAlliedTo)) continue;
+            Vec3 relative = other.position().subtract(e.position()).multiply(1, 0, 1);
+            if (relative.dot(forward) < 0) continue;
+            Vec3 motion = other.getDeltaMovement().subtract(e.getDeltaMovement()).multiply(1, 0, 1);
+            double time = motion.lengthSqr() > 0.001 ? Mth.clamp(-relative.dot(motion) / motion.lengthSqr(), 0, 30) : 0;
+            double gap = Math.max(5, Math.max(e.getBoundingBox().getXsize(), e.getBoundingBox().getZsize()) / 2
+                    + Math.max(other.getBoundingBox().getXsize(), other.getBoundingBox().getZsize()) / 2 + 2);
+            if (relative.add(motion.scale(time)).length() > gap || relative.length() > gap + 18) continue;
+            boolean following = e.getLookAngle().dot(other.getLookAngle()) > 0.7;
+            if (following && other.getDeltaMovement().horizontalDistance() > 0.05) { f.yieldUntil = now + 5; return goal; }
+            // Everyone passes on their own right; an opposed convoy therefore separates to different sides.
+            Vec3 right = new Vec3(-forward.z, 0, forward.x);
+            f.trafficGoal = MovementBounds.clamp(e, e.position().add(forward.scale(10)).add(right.scale(gap + 4)), 8);
+            f.trafficUntil = now + 100;
+            if (!(other.getFirstPassenger() instanceof Bot) || e.getUUID().compareTo(other.getUUID()) > 0) f.yieldUntil = now + 12;
+            return f.trafficGoal;
+        }
+        return goal;
+    }
+    private static boolean clearTraffic(Entity e, Flight f, Vec3 point) {
+        AABB volume = e.getBoundingBox().minmax(e.getBoundingBox().move(point.subtract(e.position()))).inflate(0.5);
+        return f.allies.stream().filter(other -> !other.isRemoved() && other.level() == e.level()
+                && other.getPassengers().stream().anyMatch(f.driver::isAlliedTo)).noneMatch(other -> volume.intersects(other.getBoundingBox()));
+    }
+    private Vec3 airSpacing(Vessel vessel, Flight f, Vec3 goal, long now, boolean landing) {
+        Entity e = vessel.entity(); scanTraffic(vessel, f, now);
+        if (e.onGround()) return goal;
+        for (Entity other : f.allies) {
+            if (other.isRemoved() || other.getPassengers().stream().noneMatch(f.driver::isAlliedTo)) continue;
+            Vec3 relative = other.position().subtract(e.position()), motion = other.getDeltaMovement().subtract(e.getDeltaMovement());
+            double time = motion.lengthSqr() > 0.001 ? Mth.clamp(-relative.dot(motion) / motion.lengthSqr(), 0, 60) : 0;
+            double gap = Math.max(24, (e.getBbWidth() + other.getBbWidth()) / 2 + 12);
+            if (relative.add(motion.scale(time)).length() >= gap) continue;
+            Vec3 away = relative.scale(-1).normalize();
+            if (away.lengthSqr() < 0.1) away = new Vec3(e.getUUID().compareTo(other.getUUID()) > 0 ? 1 : -1, 0, 0);
+            boolean climb = e.getUUID().compareTo(other.getUUID()) > 0;
+            Vec3 safe = e.position().add(away.multiply(1, 0, 1).normalize().scale(25));
+            safe = new Vec3(safe.x, landing ? e.getY() : climb ? Math.max(e.getY() + 10, other.getY() + 14)
+                    : Math.max(groundHeight(e, safe) + 16, e.getY()), safe.z);
+            if (flightSweep(vessel, e.position(), safe)) { f.phase = "AIR_SEPARATION"; return safe; }
+        }
+        return goal;
+    }
+    private static boolean flightSweep(Vessel v, Vec3 from, Vec3 to) {
+        Entity e = v.entity(); var shape = v.footprint();
+        double radius = Math.max(1.5, shape.halfSize().horizontalDistance());
+        int steps = Math.max(1, Mth.ceil(from.distanceTo(to) / 2));
+        for (int i = 0; i <= steps; i++) {
+            Vec3 p = from.lerp(to, (double) i / steps);
+            AABB box = new AABB(p.x - radius, p.y + 0.3, p.z - radius,
+                    p.x + radius, p.y + Math.max(3, shape.center().y + shape.halfSize().y), p.z + radius);
+            if (!VehicleNavigation.loaded(e, box) || e.level().getBlockCollisions(e, box).iterator().hasNext()) return false;
+        }
+        return true;
+    }
+
     private static boolean ramSafe(Bot driver, Entity vehicle, LivingEntity enemy) {
         var swept = vehicle.getBoundingBox().minmax(enemy.getBoundingBox()).inflate(1);
         return vehicle.level().getEntities(vehicle, swept).stream().noneMatch(other -> other != driver
                 && other.getRootVehicle() != vehicle && other instanceof LivingEntity && driver.isAlliedTo(other));
-    }
-    private static Vec3 groundRoute(Entity e, Vec3 delta) {
-        Vec3 wanted = delta.normalize(), best = null; double score = -Double.MAX_VALUE;
-        for (int degrees : new int[]{0, 30, -30, 60, -60, 90, -90}) {
-            Vec3 direction = wanted.yRot((float) Math.toRadians(degrees));
-            Vec3 end = e.position().add(direction.scale(5));
-            if (!MovementBounds.contains(e, end, 8) || !e.level().hasChunkAt(BlockPos.containing(end))) continue;
-            Vec3 eye = e.position().add(0, 1.2, 0);
-            if (!clearLine(e, eye, eye.add(direction.scale(5)))) continue;
-            double floor = groundHeight(e, end);
-            if (Math.abs(floor - e.getY()) > Math.max(1.2, e.maxUpStep())) continue;
-            double value = direction.dot(wanted) * 10 - Math.abs(degrees) * 0.01;
-            if (value > score) { score = value; best = direction; }
-        }
-        return best;
     }
     private static Vec3 landingPoint(Entity e) {
         for (int radius : new int[]{0, 6, 12}) for (int i = 0; i < (radius == 0 ? 1 : 8); i++) {
@@ -281,23 +461,16 @@ final class VehiclePilot {
             if (!e.level().getBlockState(floor).isSolid() || !e.level().getFluidState(floor).isEmpty()) continue;
             double width = Math.max(2, e.getBbWidth() / 2);
             AABB volume = new AABB(p.x - width, p.y + 0.15, p.z - width, p.x + width, p.y + Math.max(3, e.getBbHeight()), p.z + width);
-            if (!e.level().getBlockCollisions(e, volume).iterator().hasNext()) return p;
+            if (VehicleNavigation.loaded(e, volume) && !e.level().getBlockCollisions(e, volume).iterator().hasNext()) return p;
         }
         return null;
-    }
-    private static boolean flightClear(Entity e, Vec3 point) {
-        if (!MovementBounds.contains(e, point, 8) || !e.level().hasChunkAt(BlockPos.containing(point))) return false;
-        double width = Math.max(1.5, e.getBbWidth() / 2);
-        AABB volume = new AABB(point.x - width, point.y + 0.3, point.z - width,
-                point.x + width, point.y + Math.max(3, e.getBbHeight()), point.z + width);
-        return !e.level().getBlockCollisions(e, volume).iterator().hasNext();
     }
     private static double groundHeight(Entity e, Vec3 point) {
         if (!e.level().hasChunkAt(BlockPos.containing(point))) return e.getY();
         return e.level().getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, Mth.floor(point.x), Mth.floor(point.z));
     }
     private static boolean clearLine(Entity e, Vec3 start, Vec3 end) {
-        return e.level().hasChunkAt(BlockPos.containing(end)) && e.level().clip(new ClipContext(start, end,
+        return VehicleNavigation.loaded(e, new AABB(start, end).inflate(0.01)) && e.level().clip(new ClipContext(start, end,
                 ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, e)).getType() == HitResult.Type.MISS;
     }
     private static float yaw(Vec3 direction) { return (float) Math.toDegrees(Math.atan2(-direction.x, direction.z)); }

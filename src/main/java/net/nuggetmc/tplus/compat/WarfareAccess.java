@@ -45,11 +45,13 @@ public interface WarfareAccess {
     record Seat(int index, boolean banHand, boolean enclosed, boolean rotateHead, float minPitch, float maxPitch,
                 float minYaw, float maxYaw, List<String> weapons) {}
     record MountedWeapon(int index, String name, Specs specs, int ammo, int reserve, boolean ready, boolean reloading) {}
+    record Footprint(Vec3 center, Vec3 halfSize) {}
 
     /** Every mutating operation verifies the actual occupied seat in the native adapter. */
     interface Vessel {
         Entity entity();
         String engine();
+        Footprint footprint();
         List<Seat> seats();
         int seatIndex(Entity passenger);
         Entity passenger(int seat);

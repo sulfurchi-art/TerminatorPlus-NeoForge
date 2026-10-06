@@ -44,7 +44,8 @@ public final class VehicleCrew {
     private final Map<Entity, Ship> ships = new HashMap<>();
     private final Map<Bot, Long> boardingRest = new HashMap<>();
 
-    VehicleCrew(BotSkills skills, WarfareSupport warfare) { this.skills = skills; this.warfare = warfare; this.pilot = new VehiclePilot(warfare); }
+    VehicleCrew(BotSkills skills, WarfareSupport warfare) { this.skills = skills; this.warfare = warfare; this.pilot = new VehiclePilot(warfare, skills); }
+    public int navigationPeakExpansions() { return pilot.peakExpansions(); }
     public boolean canUseHand(Bot bot) {
         if (warfare.access() == null || !warfare.access().isVehicle(bot.getVehicle())) return false;
         Vessel v = warfare.access().vessel(bot.getVehicle()); int index = v.seatIndex(bot);

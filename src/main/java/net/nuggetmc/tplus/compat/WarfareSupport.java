@@ -491,7 +491,9 @@ public final class WarfareSupport {
             if (impact.getType() != HitResult.Type.MISS && start.distanceTo(impact.getLocation()) <= radius + 3) return false;
         }
         for (Entity other : bot.level().getEntities(bot, bot.getBoundingBox().minmax(target.getBoundingBox()).inflate(radius + 2))) {
-            if (other == target || other == bot.getVehicle() || mounted && other.getRootVehicle() == bot.getRootVehicle() || !bot.isAlliedTo(other)) continue;
+            if (other == target || other == bot.getVehicle() || mounted && other.getRootVehicle() == bot.getRootVehicle()) continue;
+            boolean allied = bot.isAlliedTo(other) || access.isVehicle(other) && other.getPassengers().stream().anyMatch(bot::isAlliedTo);
+            if (!allied) continue;
             if (other.getBoundingBox().inflate(0.5).clip(start, end).isPresent()) return false;
             if (radius > 0 && other.getBoundingBox().getCenter().distanceTo(target.getBoundingBox().getCenter()) < radius + 2) return false;
         }

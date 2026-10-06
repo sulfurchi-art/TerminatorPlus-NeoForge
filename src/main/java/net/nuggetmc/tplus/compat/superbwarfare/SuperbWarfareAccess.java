@@ -35,7 +35,7 @@ public final class SuperbWarfareAccess implements WarfareAccess {
     private final Map<String, Method> vehicleMethods = new HashMap<>(), seatMethods = new HashMap<>();
     private final Field gunStack, boltState, boltNeeded;
     private final Method boolGet;
-    private final Method vehicleEngine, vehicleSeats;
+    private final Method vehicleEngine, vehicleSeats, footprintSize, footprintCenter;
     private final Class<?> missile;
     private final Method missileTarget, changeAmmo, countAmmo;
 
@@ -95,6 +95,9 @@ public final class SuperbWarfareAccess implements WarfareAccess {
         bind("setWeaponIndex", int.class, int.class); bind("getShootPos", Entity.class, float.class);
         bind("getShootVec", Entity.class, float.class); bind("vehicleShoot", LivingEntity.class, UUID.class, Vec3.class);
         bind("setEnergy", int.class);
+        bind("getCollisionOBBInfo");
+        Class<?> obbInfo = Class.forName(ROOT + "data.vehicle.subdata.OBBInfo");
+        footprintSize = obbInfo.getMethod("getSize"); footprintCenter = obbInfo.getMethod("getPosition");
         Class<?> computed = Class.forName(ROOT + "data.vehicle.DefaultVehicleData");
         vehicleEngine = computed.getMethod("getEngineType"); vehicleSeats = computed.getMethod("seats");
         missile = Class.forName(ROOT + "entity.projectile.MissileProjectile");
@@ -214,9 +217,19 @@ public final class SuperbWarfareAccess implements WarfareAccess {
     private final class NativeVessel implements Vessel {
         private final Entity entity;
         NativeVessel(Entity entity) { this.entity = entity; }
+        private Footprint shape; private int shapeTick = -100;
         Object v(String method, Object... args) { return call(vehicleMethods.get(method), entity, args); }
         @Override public Entity entity() { return entity; }
         @Override public String engine() { return call(vehicleEngine, v("computed")).toString(); }
+        @Override public Footprint footprint() {
+            if (shape != null && entity.tickCount - shapeTick < 10) return shape;
+            shapeTick = entity.tickCount;
+            Object info = v("getCollisionOBBInfo");
+            if (info != null) return shape = new Footprint((Vec3) call(footprintCenter, info), (Vec3) call(footprintSize, info));
+            double width = Math.max(1.5, entity.getBbWidth() / 2);
+            double height = Math.max(2, entity.getBbHeight());
+            return shape = new Footprint(new Vec3(0, height / 2, 0), new Vec3(width, height / 2, width));
+        }
         @Override public List<Seat> seats() {
             List<?> seats = (List<?>) call(vehicleSeats, v("computed")); List<Seat> result = new ArrayList<>();
             for (int i = 0; i < seats.size(); i++) {

@@ -1,7 +1,7 @@
 # 开发交接文档
 
 > 写给接手这个项目的 AI 编程助手。人类用户说中文，回复请用简体中文。
-> 最后更新：2026-10-05（4.16.0-BETA 无人机/C4/电棍内测封包）。面向玩家的用法见 `README.md` 和 `AI_HARDNESS.md`，本文件讲实现细节、测试方法和接手须知。
+> 最后更新：2026-10-05（4.17.0-BETA 载具寻路/协同）。面向玩家的用法见 `README.md` 和 `AI_HARDNESS.md`，本文件讲实现细节、测试方法和接手须知。
 
 ## 项目是什么
 
@@ -21,7 +21,7 @@
 
 ```bash
 export JAVA_HOME="C:/Program Files/Microsoft/jdk-21.0.7.6-hotspot"   # 用户机器上的 JDK 21
-./gradlew build          # 产物：build/libs/TerminatorPlus-NeoForge-1.21.1-4.16.0-BETA.jar
+./gradlew build          # 产物：build/libs/TerminatorPlus-NeoForge-1.21.1-4.17.0-BETA.jar
 ./gradlew runSelfTest    # 全套自测，约 6–8 分钟，见下文"测试"
 ```
 
@@ -124,7 +124,7 @@ export JAVA_HOME="C:/Program Files/Microsoft/jdk-21.0.7.6-hotspot"   # 用户机
 - **定向调试：** `./gradlew runSelfTest "-PselftestFocus=pressure,moving target"` 仅执行名称包含对应文本的场景，旧技能场景也支持筛选；部署前仍需跑不带该参数的完整测试。
 - **加场景：** 在 `SelfTest.skillScenarios()` 里加一个 `Scenario(name, setup, passed, timeout, cleanup)`。
   - 可以用的辅助方法：`spawnBot`、`spawnHusk`、`forceArea`、`setBlock`、`track`、`trackBiggestHit`。
-  - 每个场景要占一块没被占用的 x 坐标区域，当前场景使用到 x≈7900。
+  - 每个场景要占一块没被占用的 x 坐标区域，当前原生场景使用到 x≈16500。
   - `cleanup()` 会把目标模式和 `buildblock` 复位，再执行 `bot reset`。
 - **改了行为就要同步：** 加或改对应场景，并更新 `README.md` 里的检查数量和场景列表。
 
@@ -337,3 +337,15 @@ export JAVA_HOME="C:/Program Files/Microsoft/jdk-21.0.7.6-hotspot"   # 用户机
 - DefaultEquipment.warfare 的 1–9 去刀/合金剑、保持按级枪种/有限备弹；10 电棍通过 NeoForge FE capability 充至真实 max，开 Open 并原生 Player.attack→hurtEnemy 电击，攻击后再补 FE。低于 10 不补电；不增加攻击数值。原生 M35/6B47/PASGT 与 6B43/IOTV 防弹属性实际装备生效；没有原生腿/鞋不补原版。原版独立套装和用户明确保存的预设不改。
 - 新增 12 个原生场景，总专项 73；基础 130 不变。装甲减伤夹具暂停 LegacyAgent 的目标接管，只让同一原生枪械控制器射出真弹，保留 Bot 物理、真实防弹属性和正值伤害。C4 两场在 70 tick 后才启用索敌，排除出生无伤期掩盖自伤。移动投弹靶由测试 fixture 平移，不改生产无人机运动。实际结果见 `validation-4.16.0.txt`，完整回归未完成时必须如实说明。
 - 4.15 源码快照在工作区 `work/TerminatorPlus-NeoForge-4.15-source-checkpoint.zip`；4.15 JAR/ZIP 不覆盖。手雷/烟雾/TM62/装甲板其他自动使用、YSM、低级乘员、补给指令与整个 10EX 仍不标完成。用户的此次封包安排优先，未部署/重启正式服。
+
+
+## 4.17 载具寻路与协同交接
+
+- 本轮来自用户在对话中的新直接请求：网上查阅战争游戏载具 AI 并优化寻路、友军协同、敌载具对抗。新范围不等于恢复异线程实验、实现固定翼或操作正式服。原始资料和设计边界见 `docs/vehicle-ai-research-4.17.md`。
+- `VehicleNavigation` 读取 `Vessel.footprint` 的原生 COLLISION OBBInfo 公共 size/position；跨兼容边界仍只有 Minecraft 类型。无碰撞 OBB 时用原生基础碰撞尺寸保守回退。车身按朝向外接体积、九点地面支撑和 1.5 格步长检测；所有体积先检查全范围已加载区块/边界/高度。
+- 网格 4 格，8 朝向与转弯成本，起点周边 64 格、远目标切为 48 格段。搜索每车 6、共享 24 节点/tick、单次 768，有轮转队列和请求期限。规划等待不计入卡死时间；已生成路径保留 600 tick，并持续检查下一段。失败才检查后方原生倒车；倒车沿当前车身朝向检测而不假设车身已掉头，每 tick 再检查后方友军与地形。
+- `VehiclePilot` 地面安全避让使用有实际同队乘员的载具，惯性路径检查、右侧错车、短时优先级；不会控制其他人车。8+ teamwork 同目标车组有稳定正面/侧翼，射程/弹药/原生有效伤害筛选与受击换弹/低血撤退候选。队伍、开关、真实驾驶席身份每次复核。
+- 直升机沿预计航段扫掠保守体积，提前减速爬升/侧向脱离；多机进场槽位和预判分离仍由原生 keys/mouse 完成。原有原生武器瞄准/座位射界/有限诱饵/最后观察位置规则保留。WarfareSupport.safeShot 把载具上的同队乘员映射到其真实车体，避免炮弹穿过友军车体或在其旁边爆炸。
+- 新增 7 个原生场景，总数 80；基础 130 未增加。长墙/窄口、水沟、迎面车流、坦克协作伤害、直升机高墙、六车全员绕行且峰值预算 24、两机分路且双方正值原生伤害/关闭 teamwork。双机持续火力 fixture 对仍存活的靶标逐 tick 恢复血量，保留真实正值 hurt 和原生 projectile owner；Minecraft max-health 会把过高数值限制到 1024，不能只靠设超大血量延长场景。友方参战载具不设无敌。断言不得为过测放宽。
+- 最终原生专项 **80/80**；基础 **127/130**，失败为边界步兵撤离回血及同向 TeamDive 两种优先顺序，均待修。最低 NeoForge 21.1.1 构建成功；109 个冻结源文件无变化，174 个编译类逐字节匹配 JAR。六车搜索峰值 24 是节点预算验证，不是百人 TPS 结论。已交付本地内测包；详见 `docs/validation-4.17.md` 与包内原始日志。基础比 4.16 多一个远成员优先俯冲失败，不能擅自认定为无关或已修复。
+- 修改前已完成 4.16 封包后回归：原生 73/73，基础 128/130（边界步兵和历史同向 TeamDive）；108 个文件匹配冻结快照，168 个类与交付 JAR 一致。原 JAR/ZIP 保留，4.16 源码快照在工作区 `work/TerminatorPlus-NeoForge-4.16-source-checkpoint.zip`。不把当前新测试当成旧问题已修复。
