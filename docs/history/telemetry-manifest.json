@@ -1,0 +1,296 @@
+[
+  {
+    "path": "minimum/terminatorplus/battle-2026-10-07-01-25-22-031-f4b449d4.jsonl",
+    "bytes": 14053,
+    "sha256": "DCB376D6B55FED42D97BD4226FC1B3D81374A4913BEADBA456AD9859967E5F65",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "minimum/terminatorplus/battle-2026-10-07-01-27-36-985-9a6cb8f7.jsonl",
+    "bytes": 14098,
+    "sha256": "5A9815086BC1A760ACB02C1F6FB7F447D3634F520FBD3F37D26CC64A83B60911",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "minimum/terminatorplus/battle-2026-10-07-01-27-44-234-72130319.jsonl",
+    "bytes": 43986,
+    "sha256": "EE9C31E88A6F04DC314AF159C21A1A98EBBEC91F63933E6594605FF0B3A6FCE4",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "minimum/terminatorplus/battle-2026-10-07-01-27-59-481-bbf7161b.jsonl",
+    "bytes": 244818,
+    "sha256": "442B1DAD4B62CD839B06E52F7FDB350B0D8684378C3FBC37AF9199565B4684A1",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "minimum/terminatorplus/pressure-c788f21a-366e-4485-bb4e-fe19d5f35eeb.jsonl",
+    "bytes": 262482,
+    "sha256": "8A33D5B0407C4F154B9F0C9EF5E7B926ADCBA41F9FF8E0666F533263E63C80E6",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-06-21-45-20-505-50cdc337.jsonl",
+    "bytes": 13914,
+    "sha256": "184702854CBF17397121078AD89F22E1B4D2D3EF719D4C0232CF32D46ACAAEF3",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-06-21-45-27-754-d900c284.jsonl",
+    "bytes": 3073,
+    "sha256": "B2AECB303ED70DE1EE0C613261B3126DC939729B35A1B615B246ECF13F05E9AD",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-06-21-48-28-323-4b67afbb.jsonl",
+    "bytes": 26582,
+    "sha256": "796C52DCEC30F22F5E141583155F0BC7EEC2B1677DFD69907C0A298B45F28606",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-06-21-48-59-790-34f714a2.jsonl",
+    "bytes": 117649,
+    "sha256": "44891B6C6DADB09883C4D530D7DDC51F2790354431ED64CAC708E938C89642BE",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-06-21-51-48-412-a5174914.jsonl",
+    "bytes": 14072,
+    "sha256": "3D9542561D82BB9A8A905EF1FF40CF4BE80EDCA9DA9CDAF60281453CE9F75803",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-06-21-51-55-661-8ce5d592.jsonl",
+    "bytes": 3130,
+    "sha256": "EBD260C481E0D80F414E63FE17F18A803020A0DF024A1805AF7B7D12BA1259AD",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-06-21-52-10-909-4d8e441a.jsonl",
+    "bytes": 244317,
+    "sha256": "14178B9D4F4C500C2B58A2F8517CF40B8481425244455A12DDBA663F530CA3C4",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-06-21-53-03-686-38186ac6.jsonl",
+    "bytes": 28874,
+    "sha256": "6F619C5FC78DDD234E7524E30079E2DDADE5BE1112A057EB6BD2E17F266DB229",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-06-21-53-35-166-81695679.jsonl",
+    "bytes": 146580,
+    "sha256": "21979E1B8E51BD072A6C83CB132DB88510888F7A878D59CFF42EF58FF547D826",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-06-21-53-45-737-0cc501bc.jsonl",
+    "bytes": 9305,
+    "sha256": "733D1E8DBDFAAE3CDE9BB71A13C2DE638DEE4D28662484457DEC1B288CA7F11F",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-06-21-56-43-455-705ca159.jsonl",
+    "bytes": 14061,
+    "sha256": "F708DE049772E363AB5B2295C3D14FDB1A665CEB37BAC3709DB5490CF72C7F1F",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-06-21-56-50-704-43da4108.jsonl",
+    "bytes": 3130,
+    "sha256": "69CFEAD26D97A7B5D8272F1A9EF4D9D2D37E97663FDF7C3AF7DB3C782EEF95D8",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-06-21-57-05-951-c752e209.jsonl",
+    "bytes": 244317,
+    "sha256": "A8EC633B50DE6FB2FBE579BC7D94A7F27359BD2581A3EF01CA6F549586F59C74",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-06-21-59-01-252-4a8f328b.jsonl",
+    "bytes": 9048,
+    "sha256": "8CFB75B0983CD9B08D16B482144E1FCA954281BB236835A103487143ED65D6E3",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-06-21-59-09-988-07e96700.jsonl",
+    "bytes": 7539,
+    "sha256": "9643E2FF3F07ACFCB87BA2413A97480F64DE66C80B501997C266ED089E939419",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-06-21-59-20-491-a64f06f9.jsonl",
+    "bytes": 8025,
+    "sha256": "FDF86AAD2C05F360A3D5B65375E7AC43868FB2D660EAB465D6346D3F661A090C",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-06-22-09-10-713-638515e5.jsonl",
+    "bytes": 26378,
+    "sha256": "9EC02FFDFEE4A657BDAD5C40ED056F0CAA477271778531589BE79F4BFAA6ABCB",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-06-22-09-42-198-337df784.jsonl",
+    "bytes": 141621,
+    "sha256": "0928112C3C977D5B1E67A28BDAFCFC20FA8361569C435321F10C493EDA715C74",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-06-22-09-52-714-dfeb1bdb.jsonl",
+    "bytes": 9367,
+    "sha256": "75AAE1ACD98F6C0A9EAC33173AB87902F688285E6FF6CA0FE6108BA0F69C05CA",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-07-01-06-47-863-e19e305c.jsonl",
+    "bytes": 14055,
+    "sha256": "1F0A4E36A468796E97FFADF5865DE857EAF6B44CCF7650BE3A372802A4F02D9C",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-07-01-07-54-818-f22106ce.jsonl",
+    "bytes": 14128,
+    "sha256": "BB3612AFEC4CD63851E1E8210C20EAD3E036B4CCFF9694DCD37563DCDA3D1443",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-07-01-08-02-068-04108ad0.jsonl",
+    "bytes": 43986,
+    "sha256": "E9B72637107097DE74E7C180A88AF9D06554386F13DEBCE010BE4A1743C8D6EB",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-07-01-08-17-315-630cc804.jsonl",
+    "bytes": 244818,
+    "sha256": "25FA42A0B8B57CB9A3B9922F9D529A75E59F0C5D58B626CBBD4C31CD89BE5D84",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-07-01-09-28-606-b26032a0.jsonl",
+    "bytes": 8746,
+    "sha256": "0169657CDF981DCA30673F841059F684023FF95507EB4635845DBD0B13B6FF1B",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-07-01-09-37-354-5faee838.jsonl",
+    "bytes": 7539,
+    "sha256": "09E4E51956DFB6F151776242E59F2AA6BC0EF0E4DDBE5E0B755EC611E6B8C259",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-07-01-09-47-853-633fe2de.jsonl",
+    "bytes": 7264,
+    "sha256": "202FEB74D52DC5D36D4D3FAA0446728E4D0022DD6ACFADC911E7687903B3F39D",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-07-01-13-29-830-da6153b9.jsonl",
+    "bytes": 27080,
+    "sha256": "5F258DFB424EBA7E99A49A6C7EC43C28379598CF693B9B4B1D58A904C1092DF5",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-07-01-14-01-314-a138a856.jsonl",
+    "bytes": 131313,
+    "sha256": "56E3A2D00AF9D874B445E64B9DD782B731F806641E407DFF8C0B72AA351EB7DF",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-07-01-14-11-831-0c02009b.jsonl",
+    "bytes": 9333,
+    "sha256": "B5FD4E0DF0C2DF54E98C93952175B24FDAF44515127BE25147D3C832D4486DAF",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-07-01-16-49-332-fa836148.jsonl",
+    "bytes": 14165,
+    "sha256": "0D89029CC1A8C04FCF6CA9BA3C05AD02E38FE5C7844D6F5D5295906B53A15F70",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-07-01-16-56-581-f2d5bac8.jsonl",
+    "bytes": 43986,
+    "sha256": "CFB2595CB363836FCB188F9B15834D9C0F85383715DD36A3C152037EF5BEEFED",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-07-01-17-11-830-e767c6e6.jsonl",
+    "bytes": 244818,
+    "sha256": "E7DF3C20F56C150BDF31B3C1D6ACC00D26752CF2DC1A75A90894D2DCB63FE79F",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-07-01-18-23-135-8624fde3.jsonl",
+    "bytes": 8746,
+    "sha256": "383ACC15481537B5C67FB2F05026766627B64CD0D073F435E55F23230AE6AE03",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-07-01-18-31-877-6a425d11.jsonl",
+    "bytes": 7538,
+    "sha256": "B5C783719D764107E0BB84ADCEBA9747C794FB8C5E422AC031501C8238D0C916",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-07-01-18-42-370-b65bdd80.jsonl",
+    "bytes": 7264,
+    "sha256": "20A5A0BE519BF5047A97AE465AF27737DB82DBECC8EF9A49118C26FE188676DE",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-07-01-22-08-095-f1119fa6.jsonl",
+    "bytes": 27077,
+    "sha256": "93C5DCECA17E18E2DA8FD31F0D63962B07520FA8CFECB9370739C5CEEDDDDF59",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-07-01-22-39-580-58062f51.jsonl",
+    "bytes": 146409,
+    "sha256": "8E27506B6F162C24596ED346B6F011C0E6BA3A3FDAAFEFF95260D9E05FADDA0F",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-07-01-22-50-102-433198b2.jsonl",
+    "bytes": 9728,
+    "sha256": "87342D2C389CC386C2576CAC418F3783DCE1F4215ADFA57575E15ACEA55DBAF7",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/battle-2026-10-07-01-24-18-697-7394c602.jsonl",
+    "bytes": 138421,
+    "sha256": "B7A8399875D40137C29F452EA3B83D6D08D07BD47EA5224F6F3FC7F513ADA1F6",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/pressure-28988659-b087-4c88-9df2-30a037544bb1.jsonl",
+    "bytes": 237898,
+    "sha256": "8E56039AED35770429BB669A114A8DEB1E8C74049C30563F33B4DBC5D0C74D64",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/pressure-44ee268f-d79d-487c-9aaa-e9e762551b34.jsonl",
+    "bytes": 237878,
+    "sha256": "2BF05E6FA81B76DF9D26990C3AE7CAEF84AEE58FD0EFC6D675A45C8E1FAC272D",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/pressure-49b54f39-ea43-43ba-8e0b-798e619e85fa.jsonl",
+    "bytes": 252940,
+    "sha256": "044357F4A900ADBE896F9219B96409089846367721FE21FB7B529CAE82CE6C31",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/pressure-7f2ad751-74d2-4940-b0c2-ef9c8db68514.jsonl",
+    "bytes": 278841,
+    "sha256": "0C8B0A196ED23B6D924413316B8C73106CC3A63A462672664669B62CF775A1FC",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  },
+  {
+    "path": "native/terminatorplus/pressure-ae1d0871-e004-48bf-9b9b-e2cd12ae7d98.jsonl",
+    "bytes": 270660,
+    "sha256": "81417E20FEE6E44A77CCD631A9EC9E8C0CE55279841847DA6880F009D6679123",
+    "archive": "battle-telemetry-4.22-archive.zip"
+  }
+]
