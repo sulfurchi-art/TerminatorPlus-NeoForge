@@ -1,0 +1,23 @@
+TerminatorPlus-NeoForge 4.7.0-BETA
+Validated: 2026-10-04
+Minecraft: 1.21.1
+Compiled and tested against NeoForge: 21.1.1 (minimum retained)
+Java: Microsoft OpenJDK 21.0.7
+Build: SUCCESSFUL
+SelfTest: ALL 89 CHECKS PASSED (44 original + 25 hardness + 20 new)
+SelfTest failure markers: none
+Jar: TerminatorPlus-NeoForge-1.21.1-4.7.0-BETA.jar
+Jar bytes: 423115
+SHA256: 552DD19745718CFBF109A23367F11CDF5C57F931E707BE81A49ACC0261014807
+Jar inspection: 4.7.0 metadata, compatibility minimum, AT, both chatter resources, and new AI/settings classes confirmed.
+Source base: c1fcf77; local changes have not been committed or pushed.
+Full functional log: ai-hardness-4.7.0-selftest.log
+Build log: ai-hardness-4.7.0-build.log
+Progress: TerminatorPlus-NeoForge/AI_HARDNESS_PROGRESS.md
+Guide: TerminatorPlus-NeoForge/AI_HARDNESS.md
+
+Scope: default loadouts and SNBT settings/profile persistence, finite level 8-9 supplies, level 10 unlimited supplies/durability with finite totems and actual death, hand-use mutex and native shields, perception/team coordination, level 10 combat windows/conditional combos/weighted choices, observed-outcome learning, and directed chatter.
+Functional fixtures include actual ServerPlayer targets and native damage/packet events; they do not establish full ladder win rates or top-player skill equivalence.
+Remaining requirements are recorded in AI_HARDNESS_PROGRESS.md (feints, pearl landing interception, full roles/directives/stats, durable cover cleanup, and combat calibration).
+The asynchronous AI performance experiment remains paused at the user's request; its scratch prototype is excluded from this jar.
+Testing used an isolated self-test server. The user's live game server was not modified or started/stopped.

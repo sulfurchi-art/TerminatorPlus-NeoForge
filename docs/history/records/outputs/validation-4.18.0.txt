@@ -1,0 +1,15 @@
+4.18.0-BETA validation
+Native: 91 PASS / 0 FAIL / 91
+Base: 128 PASS / 2 FAIL / 130
+Build: NeoForge 21.1.1, Java 21, BUILD SUCCESSFUL
+Frozen source/build files: 114
+Verified compiled classes: 178
+JAR bytes: 761198
+JAR SHA256: 2D3005E972027752B76A82E8459F903140262025EC8DC67D02466CB2FACC3C43
+Third-party source: 5b92ebe1da5daad9cc5e8ae28e3e06f1636f5816
+No foreign mod content bundled; old 4.16/4.17 artifacts preserved.
+Native failures:
+- 无
+Base failures:
+- equipment border infantry retreats heals and navigates with an inward margin
+- teamdive same side native takeoffs spread before a common smash with near member first

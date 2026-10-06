@@ -1,0 +1,62 @@
+{
+  "path": "..\\..\\work\\warfare-selftest\\logs\\terminatorplus\\battle-2026-10-07-01-06-47-863-e19e305c.jsonl",
+  "firstEvent": {
+    "tick": 0,
+    "time": "01:06:47.864",
+    "type": "log_start",
+    "version": "4.22.0-BETA",
+    "config": "{Categories:{c4:1b,damage:1b,drones:1b,items:1b,life:1b,missiles:1b,snap:1b,summary:1b,tactics:1b,vehicles:1b,weapons:1b},Enabled:1b,SnapshotTicks:40}",
+    "schema": 1
+  },
+  "first12Events": [
+    [
+      0,
+      "log_start"
+    ],
+    [
+      0,
+      "mark"
+    ],
+    [
+      0,
+      "match_start"
+    ],
+    [
+      1,
+      "spawn"
+    ],
+    [
+      1,
+      "target"
+    ],
+    [
+      1,
+      "tactic"
+    ],
+    [
+      1,
+      "role"
+    ],
+    [
+      1,
+      "flight"
+    ],
+    [
+      1,
+      "nav"
+    ],
+    [
+      1,
+      "spawn"
+    ],
+    [
+      1,
+      "target"
+    ],
+    [
+      1,
+      "tactic"
+    ]
+  ],
+  "firstMatchStartsAfterTestMark": true
+}

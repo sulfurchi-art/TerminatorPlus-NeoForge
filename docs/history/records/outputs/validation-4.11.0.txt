@@ -1,0 +1,22 @@
+TerminatorPlus-NeoForge 4.11.0-BETA manual playtest
+Validated: 2026-10-05
+Minecraft: 1.21.1
+Compiled and tested against NeoForge: 21.1.1 (minimum retained)
+Java: Microsoft OpenJDK 21.0.7
+Build: SUCCESSFUL
+SelfTest: 126 PASS / 1 FAIL / 127 total
+All six feedback scenarios passed within the full run.
+Current failure names: ['teamdive same side native takeoffs spread before a common smash with far member first']
+The intermittent same-side team dive timing issue from 4.10 remains a separate pending task; this batch does not claim it is fixed even if this run passes.
+Jar: TerminatorPlus-NeoForge-1.21.1-4.11.0-BETA.jar
+Jar bytes: 514091
+SHA256: 6537E2A362F355B5C2978A399F4435E5F29FFA06BAC99239B11F16142B92E756
+Jar inspection: archive integrity, 4.11.0 metadata, NeoForge minimum, explicit AT, chatter resources and every compiled main class byte confirmed.
+Source base: c1fcf77; local changes remain uncommitted and unpushed.
+Full functional log: ai-hardness-4.11.0-selftest.log
+Build log: ai-hardness-4.11.0-build.log
+
+This feedback batch limits elective elytra use at hardness 8-10: ordinary close combat stays on the ground, flights need offensive distance or an actual follow-up/elevated/flying enemy, and elective flights rest 200 ticks at 8-9 or 300 ticks at 10. Emergency recovery flights use a separate 100-tick limit and can bypass the elective rest during genuinely low health or recent sustained accepted damage. Flight speed, turning, jumps and gravity are unchanged. Distance alone does not mark recently damaged positions safe.
+Failed formation movement now yields to ordinary navigation and digging for 100 ticks, including formation points from which the enemy cannot be reached. Near enemies behind a wall no longer continually reset navigation progress. Empty ground recovery releases control after 60 ticks if no item use or regeneration effect can proceed.
+The six new scenarios verify actual native damage from all three high levels with no flight at close range, native golden-apple effects without an unnecessary launch at moderate health, actual solo smash followed by 200 ticks of ground pursuit, two accepted native damage events after spawn protection followed by real emergency glide during elective rest, actual ground movement and native damage beyond a blocked close formation, and real pursuit after empty-supply recovery.
+These tests establish the reproduced failure paths and conditions; they do not prove that every intermittent in-game stall, terrain configuration or third-party item interaction is fixed. The user's live game server was not modified or operated. Asynchronous AI experiments and the larger development checklist remain paused pending manual feedback.

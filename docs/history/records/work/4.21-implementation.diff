@@ -1,0 +1,429 @@
+--- 4.20/src/main/java/net/nuggetmc/tplus/compat/VehicleNavigation.java
++++ 4.21/src/main/java/net/nuggetmc/tplus/compat/VehicleNavigation.java
+@@ -179,6 +179,16 @@
+         }
+         return true;
+     }
++    /** Native horizontal chassis bounds for short dynamic-vehicle avoidance. */
++    static AABB body(Vessel v, Vec3 point, float yaw) {
++        var shape = v.footprint(); double angle = Math.toRadians(yaw);
++        double sine = Math.abs(Math.sin(angle)), cosine = Math.abs(Math.cos(angle));
++        double x = shape.halfSize().x * cosine + shape.halfSize().z * sine;
++        double z = shape.halfSize().x * sine + shape.halfSize().z * cosine;
++        Vec3 center = point.add(shape.center().yRot((float) -angle));
++        return new AABB(center.x - x, center.y - shape.halfSize().y, center.z - z,
++                center.x + x, center.y + shape.halfSize().y, center.z + z);
++    }
+     @Nullable static Vec3 site(Vessel v, Vec3 point, float yaw) { return site(v, point, yaw, 0.75); }
+     @Nullable private static Vec3 site(Vessel v, Vec3 point, float yaw, double margin) {
+         rejection = null;
+--- 4.20/src/main/java/net/nuggetmc/tplus/compat/VehiclePilot.java
++++ 4.21/src/main/java/net/nuggetmc/tplus/compat/VehiclePilot.java
+@@ -30,14 +30,19 @@
+         final VehicleNavigation.Route route = new VehicleNavigation.Route();
+         Bot driver; String engine; boolean cooperative, weaponReady;
+         double combatRange = 48, minimumRange = 18;
+-        Vec3 groundAttack, groundEnemy, groundVelocity;
+-        int groundTarget = -1, groundLeg, groundRank = -1;
++        Vec3 groundAttack, groundEnemy, groundVelocity, closeGoal, closeEnemy;
++        int groundTarget = -1, groundLeg, groundRank = -1, groundSide;
+         boolean groundMoving;
+         long groundUntil, groundAt, fireUntil;
+         String groundPhase = "ATTACK_APPROACH";
+         long nextTrafficScan, trafficUntil, yieldUntil;
++        Entity passing;
++        Vec3 passingAxis;
++        boolean parking, parked;
++        long passingUntil;
+         int airTarget = -1;
+         List<Entity> allies = List.of();
++        List<Entity> nearbyVehicles = List.of();
+         long nextSeparation;
+         int antiAirTarget = -1;
+         long seenAt = -1000, hurtUntil, nextDecoy, orbitUntil; float health = -1; boolean antiAir; int pass;
+@@ -56,12 +61,13 @@
+ 
+     void go(Vessel vessel, Vec3 point) {
+         Flight f = flights.computeIfAbsent(vessel.entity(), Flight::new);
+-        f.waypoint = point; f.extend = null; f.attackSince = -1; f.route.reset(); f.trafficGoal = null;
++        f.waypoint = point; f.extend = null; f.attackSince = -1; f.route.reset(); f.trafficGoal = null; f.passing = null;
+     }
+     void forget(Entity vessel) { flights.remove(vessel); navigation.forget(vessel); }
+     void clear() { flights.clear(); navigation.clear(); }
+     String describe(Entity vessel) { Flight f = flights.get(vessel); return f == null ? "IDLE" : f.phase + " nav=" + f.route.state + "/" + f.route.expanded
+-                + (f.route.problem == null ? "" : " terrain=" + f.route.problem.reason() + "@" + f.route.problem.position().toShortString()); }
++                + (f.route.problem == null ? "" : " terrain=" + f.route.problem.reason() + "@" + f.route.problem.position().toShortString())
++                + (f.trafficGoal == null ? "" : " traffic=" + BlockPos.containing(f.trafficGoal).toShortString()); }
+     boolean hasWaypoint(Entity vessel) { Flight f = flights.get(vessel); return f != null && f.waypoint != null; }
+ 
+     boolean tick(Bot bot, Vessel vessel, @Nullable LivingEntity enemy, long now, boolean land, boolean waitForCrew) {
+@@ -72,7 +78,7 @@
+         f.cooperative = skills.enabled(bot, "teamwork") && bot.getTeam() != null;
+         int id = enemy == null ? -1 : enemy.getId();
+         if (id != f.threatId || now >= f.threatAt) {
+-            if (f.threatId != id) { f.retreat = null; f.groundAttack = null; f.groundTarget = -1; f.fireUntil = 0; }
++            if (f.threatId != id) { f.retreat = null; f.groundAttack = null; f.groundTarget = -1; f.fireUntil = 0; f.closeGoal = null; }
+             f.threatId = id; f.threatAt = now + 20;
+             f.dangerous = enemy != null && warfare.canThreaten(vessel, enemy);
+             f.antiAir = enemy != null && warfare.antiAirThreat(vessel, enemy);
+@@ -103,8 +109,14 @@
+                 if (f.retreat == null) f.retreat = cover(vessel, enemy, delta);
+                 goal = f.retreat;
+             } else if (warfare.isVehicle(enemy.getRootVehicle()) && bot.hardness().level() >= 8) {
+-                if (delta.horizontalDistance() < f.minimumRange) {
+-                    f.phase = "STANDOFF"; goal = e.position().subtract(delta.normalize().scale(f.minimumRange + 8 - delta.horizontalDistance()));
++                if (f.closeGoal != null && (e.position().subtract(f.closeGoal).horizontalDistance() < 4
++                        || enemy.getRootVehicle().position().subtract(f.closeEnemy).horizontalDistance() > 6)) f.closeGoal = null;
++                if (delta.horizontalDistance() < f.minimumRange || f.closeGoal != null) {
++                    if (f.closeGoal == null) {
++                        f.closeEnemy = enemy.getRootVehicle().position();
++                        f.closeGoal = new Vec3(f.closeEnemy.x, e.getY(), f.closeEnemy.z).subtract(delta.normalize().scale(f.minimumRange + 10));
++                    }
++                    f.phase = "STANDOFF"; goal = f.closeGoal;
+                 } else if (!f.weaponReady && f.dangerous && f.hurtUntil > f.lastTick) {
+                     if (f.retreat == null) f.retreat = cover(vessel, enemy, delta);
+                     f.phase = "RELOAD_COVER"; goal = f.retreat;
+@@ -153,6 +165,8 @@
+         Vec3 original = goal;
+         goal = traffic(vessel, f, goal, f.lastTick);
+         if (f.lastTick < f.yieldUntil) { f.phase = "YIELD_TEAM"; vessel.input(bot, 16, 0, 0); return; }
++        // A short rearward combat leg should use native reverse, not search for room to turn the chassis around.
++        if ((enemy != null && f.waypoint == null || goal != original) && reverseForGoal(bot, vessel, f, goal)) return;
+         if (f.lastTick < f.route.reverseUntil) {
+             Vec3 rear = e.position().subtract(e.getLookAngle().multiply(1, 0, 1).normalize()
+                     .scale(Mth.clamp(4 + e.getDeltaMovement().horizontalDistance() * 20, 4, 12)));
+@@ -236,7 +250,13 @@
+             if (rank > 0) {
+                 Vec3 anchorAway = group.getFirst().vehicle.position().subtract(targetPos).multiply(1, 0, 1).normalize();
+                 if (anchorAway.lengthSqr() > 0.1) away = anchorAway;
+-                int side = rank % 2 == 0 ? 1 : -1;
++                Vec3 lateral = new Vec3(-away.z, 0, away.x);
++                if (f.groundSide == 0 || f.groundTarget != enemy.getId() || f.groundRank != rank) {
++                    double offset = e.position().subtract(group.getFirst().vehicle.position()).dot(lateral);
++                    // Preserve the side already occupied instead of crossing through the leading vehicle.
++                    f.groundSide = Math.abs(offset) > 4 ? offset > 0 ? 1 : -1 : rank % 2 == 0 ? 1 : -1;
++                }
++                int side = f.groundSide;
+                 double flank = Math.min(40, 22 + rank * 6);
+                 // Alternate the supporting position after each firing pause while retaining the assigned side.
+                 candidate = predicted.add(away.scale(radius + (f.groundLeg % 2) * 8))
+@@ -247,8 +267,19 @@
+                 f.groundPhase = moving ? "ATTACK_INTERCEPT" : "ATTACK_APPROACH";
+             } else {
+                 int side = (f.groundLeg % 2 == 0 ? 1 : -1) * (e.getUUID().hashCode() % 2 == 0 ? 1 : -1);
++                if (group.size() > 1) {
++                    double offset = e.position().subtract(group.get(1).vehicle.position()).dot(new Vec3(-away.z, 0, away.x));
++                    if (Math.abs(offset) > 4) side = offset > 0 ? -1 : 1;
++                }
+                 candidate = targetPos.add(away.yRot((float) Math.toRadians(side * 30)).scale(radius));
+                 f.groundPhase = "ATTACK_REPOSITION";
++            }
++            if (armor && !moving && delta.length() <= radius + 16 && !localFacingFits(vessel, candidate)) {
++                Vec3 local = laneCombatGoal(vessel, f, targetPos);
++                if (local != null) {
++                    candidate = local;
++                    f.groundPhase = candidate.subtract(e.position()).dot(e.getLookAngle()) < 0 ? "ATTACK_BACKSTEP" : "ATTACK_LANE_ADVANCE";
++                }
+             }
+             f.groundAttack = MovementBounds.clamp(e, candidate, 8); f.groundEnemy = targetPos;
+             f.groundVelocity = velocity; f.groundAt = f.lastTick;
+@@ -259,6 +290,49 @@
+         f.groundAttack = new Vec3(f.groundAttack.x, e.getY(), f.groundAttack.z);
+         f.phase = f.groundPhase;
+         return f.groundAttack;
++    }
++
++    private static boolean localFacingFits(Vessel vessel, Vec3 goal) {
++        Entity e = vessel.entity(); Vec3 delta = goal.subtract(e.position()).multiply(1, 0, 1);
++        float facing = delta.lengthSqr() < 1 ? e.getYRot() : yaw(delta);
++        return VehicleNavigation.site(vessel, goal, facing) != null && VehicleNavigation.turnClear(vessel, e.position(), e.getYRot(), facing);
++    }
++    @Nullable private Vec3 laneCombatGoal(Vessel vessel, Flight f, Vec3 enemy) {
++        Entity e = vessel.entity(); scanTraffic(vessel, f, f.lastTick);
++        Vec3 forward = e.getLookAngle().multiply(1, 0, 1).normalize();
++        // Two bounded, straight alternatives. Keep normal flanking when its chassis turn and destination fit.
++        int first = e.position().subtract(enemy).horizontalDistance() > f.minimumRange + 16 ? 1 : -1;
++        for (int sign : new int[]{first, -first}) {
++            Vec3 point = e.position().add(forward.scale(sign * 10));
++            if (point.subtract(enemy).horizontalDistance() < f.minimumRange + 3
++                    || !VehicleNavigation.reverseClear(vessel, e.position(), point, e.getYRot()) || !clearVehicles(vessel, f, point)) continue;
++            return point;
++        }
++        return null;
++    }
++    private boolean reverseForGoal(Bot bot, Vessel vessel, Flight f, Vec3 goal) {
++        Entity e = vessel.entity(); Vec3 delta = goal.subtract(e.position()).multiply(1, 0, 1);
++        Vec3 forward = e.getLookAngle().multiply(1, 0, 1).normalize();
++        double backward = -delta.dot(forward);
++        if (backward < 4 || delta.length() > 64 || delta.normalize().dot(forward) > -0.96) return false;
++        double distance = Math.min(backward, Mth.clamp(4 + e.getDeltaMovement().horizontalDistance() * 20, 4, 12));
++        Vec3 rear = e.position().subtract(forward.scale(distance));
++        if (!VehicleNavigation.reverseClear(vessel, e.position(), rear, e.getYRot()) || !clearVehicles(vessel, f, rear)) return false;
++        if (!f.route.state.equals("LOCAL_REVERSE")) { f.route.reset(); navigation.forget(e); }
++        f.route.state = "LOCAL_REVERSE"; f.route.problem = null;
++        f.phase = f.phase.equals("STANDOFF") ? "CLOSE_REVERSE" : goal == f.trafficGoal ? "PASS_TEAM_REVERSE"
++                : f.phase.equals("RETREAT") || f.phase.equals("RELOAD_COVER") ? f.phase + "_REVERSE" : "ATTACK_BACKSTEP";
++        // Brake existing forward momentum before selecting reverse; steering and all acceleration stay native.
++        int keys = e.getDeltaMovement().dot(forward) > 0.12 ? 16 : 8;
++        if (vessel.threatened()) keys |= 64;
++        vessel.input(bot, keys, 0, 0); return true;
++    }
++    private boolean clearVehicles(Vessel vessel, Flight f, Vec3 point) {
++        Entity e = vessel.entity(); scanTraffic(vessel, f, f.lastTick);
++        AABB volume = VehicleNavigation.body(vessel, e.position(), e.getYRot())
++                .minmax(VehicleNavigation.body(vessel, point, e.getYRot())).inflate(0.2);
++        return f.nearbyVehicles.stream().filter(other -> !other.isRemoved() && other.level() == e.level())
++                .noneMatch(other -> volume.intersects(VehicleNavigation.body(warfare.access().vessel(other), other.position(), other.getYRot())));
+     }
+ 
+     private static double interceptTime(Vec3 delta, Vec3 velocity, double speed, double range) {
+@@ -491,17 +565,43 @@
+     private void scanTraffic(Vessel vessel, Flight f, long now) {
+         if (now < f.nextTrafficScan) return;
+         f.nextTrafficScan = now + 10;
+-        f.allies = vessel.entity().level().getEntities(vessel.entity(), vessel.entity().getBoundingBox().inflate(vessel.engine().equals("HELICOPTER") ? 80 : 40), other -> warfare.isVehicle(other)
+-                && other.getPassengers().stream().anyMatch(f.driver::isAlliedTo));
++        f.nearbyVehicles = vessel.entity().level().getEntities(vessel.entity(), vessel.entity().getBoundingBox().inflate(vessel.engine().equals("HELICOPTER") ? 80 : 40), warfare::isVehicle);
++        f.allies = f.nearbyVehicles.stream().filter(other -> other.getPassengers().stream().anyMatch(f.driver::isAlliedTo)).toList();
+     }
+     private Vec3 traffic(Vessel vessel, Flight f, Vec3 goal, long now) {
+         Entity e = vessel.entity(); scanTraffic(vessel, f, now);
++        if (f.passing != null) {
++            Entity other = f.passing;
++            if (other.isRemoved() || other.level() != e.level() || now >= f.passingUntil
++                    || other.getPassengers().stream().noneMatch(f.driver::isAlliedTo)
++                    || other.position().subtract(e.position()).dot(f.passingAxis) < -14) {
++                f.passing = null; f.trafficGoal = null; f.parking = f.parked = false;
++            } else {
++                if (f.parking) {
++                    if (e.position().subtract(f.trafficGoal).horizontalDistance() < 3) f.parked = true;
++                    if (f.parked) { f.yieldUntil = now + 1; return goal; }
++                    return f.trafficGoal;
++                }
++                if (f.trafficGoal != null && e.position().subtract(f.trafficGoal).horizontalDistance() > 4) return f.trafficGoal;
++                Vec3 side = e.position().add(new Vec3(-f.passingAxis.z, 0, f.passingAxis.x).scale(14));
++                if (localFacingFits(vessel, side) && clearVehicles(vessel, f, side)) {
++                    f.trafficGoal = side; f.parking = true; f.yieldUntil = now; return side;
++                }
++                Vec3 rear = e.position().subtract(e.getLookAngle().multiply(1, 0, 1).normalize().scale(10));
++                if (VehicleNavigation.reverseClear(vessel, e.position(), rear, e.getYRot()) && clearVehicles(vessel, f, rear)) {
++                    f.trafficGoal = rear; f.yieldUntil = now; return rear;
++                }
++                f.yieldUntil = now + 6; return goal;
++            }
++        }
+         if (f.trafficGoal != null && now < f.trafficUntil && e.position().distanceToSqr(f.trafficGoal) > 25) return f.trafficGoal;
+         f.trafficGoal = null;
+         Vec3 forward = goal.subtract(e.position()).multiply(1, 0, 1).normalize();
+         for (Entity other : f.allies) {
+             if (other.isRemoved() || other.level() != e.level() || Math.abs(other.getY() - e.getY()) > 6
+                     || other.getPassengers().stream().noneMatch(f.driver::isAlliedTo)) continue;
++            Flight yielding = flights.get(other);
++            if (yielding != null && yielding.passing == e && yielding.parked) continue;
+             Vec3 relative = other.position().subtract(e.position()).multiply(1, 0, 1);
+             if (relative.dot(forward) < 0) continue;
+             Vec3 motion = other.getDeltaMovement().subtract(e.getDeltaMovement()).multiply(1, 0, 1);
+@@ -514,16 +614,29 @@
+             // Everyone passes on their own right; an opposed convoy therefore separates to different sides.
+             Vec3 right = new Vec3(-forward.z, 0, forward.x);
+             f.trafficGoal = MovementBounds.clamp(e, e.position().add(forward.scale(10)).add(right.scale(gap + 4)), 8);
++            if (!localFacingFits(vessel, f.trafficGoal)) {
++                // A single lane cannot fit two imaginary side paths. Exactly one native AI backs toward open space.
++                boolean giveWay = !(other.getFirstPassenger() instanceof Bot) || e.getUUID().compareTo(other.getUUID()) > 0;
++                Vec3 rear = e.position().subtract(e.getLookAngle().multiply(1, 0, 1).normalize().scale(10));
++                if (giveWay && VehicleNavigation.reverseClear(vessel, e.position(), rear, e.getYRot()) && clearVehicles(vessel, f, rear)) {
++                    f.passing = other; f.passingAxis = forward; f.parking = f.parked = false; f.passingUntil = now + 600;
++                    f.trafficGoal = rear; f.trafficUntil = now + 60; f.yieldUntil = now; return rear;
++                }
++                f.trafficGoal = null; f.yieldUntil = now + 6; return goal;
++            }
+             f.trafficUntil = now + 100;
+             if (!(other.getFirstPassenger() instanceof Bot) || e.getUUID().compareTo(other.getUUID()) > 0) f.yieldUntil = now + 12;
+             return f.trafficGoal;
+         }
+         return goal;
+     }
+-    private static boolean clearTraffic(Entity e, Flight f, Vec3 point) {
+-        AABB volume = e.getBoundingBox().minmax(e.getBoundingBox().move(point.subtract(e.position()))).inflate(0.5);
++    private boolean clearTraffic(Entity e, Flight f, Vec3 point) {
++        Vessel vessel = warfare.access().vessel(e);
++        AABB volume = VehicleNavigation.body(vessel, e.position(), e.getYRot())
++                .minmax(VehicleNavigation.body(vessel, point, e.getYRot())).inflate(0.5);
+         return f.allies.stream().filter(other -> !other.isRemoved() && other.level() == e.level()
+-                && other.getPassengers().stream().anyMatch(f.driver::isAlliedTo)).noneMatch(other -> volume.intersects(other.getBoundingBox()));
++                && other.getPassengers().stream().anyMatch(f.driver::isAlliedTo))
++                .noneMatch(other -> volume.intersects(VehicleNavigation.body(warfare.access().vessel(other), other.position(), other.getYRot())));
+     }
+     private Vec3 airSpacing(Vessel vessel, Flight f, Vec3 goal, long now, boolean landing) {
+         Entity e = vessel.entity(); scanTraffic(vessel, f, now);
+--- 4.20/src/main/java/net/nuggetmc/tplus/utils/SelfTest.java
++++ 4.21/src/main/java/net/nuggetmc/tplus/utils/SelfTest.java
+@@ -997,6 +997,7 @@
+         list.addAll(warfareC4PassScenarios(y));
+         list.addAll(warfareNavigationScenarios(y));
+         list.addAll(warfareGroundScenarios(y));
++        list.addAll(warfareCloseRoadScenarios(y));
+         list.addAll(warfareMissileScenarios(y));
+         return list;
+     }
+@@ -1222,7 +1223,7 @@
+             crew.board(anchor[0], armor[0], 0); crew.board(flank[0], armor[1], 0);
+             spawnHusk(15740.5, y, 0.5, 10000, true).startRiding(armor[2], true); owners[0] = captureNativeOwners(List.of(anchor[0], flank[0]));
+             track(() -> { cooperation[0] |= war.describe(anchor[0]).contains("TEAM_FLANK") || war.describe(flank[0]).contains("TEAM_FLANK");
+-                if (anchor[0].getAliveTicks() % 100 == 0) LOGGER.info("[SelfTest] Armor fight one={} two={} targetHealth={} owners={}", war.describe(anchor[0]), war.describe(flank[0]), vehicleHealth(armor[2]), owners[0]); });
++                if (anchor[0].getAliveTicks() % 100 == 0) LOGGER.info("[SelfTest] Armor fight pos={},{} one={} two={} targetHealth={} owners={}", armor[0].position(), armor[1].position(), war.describe(anchor[0]), war.describe(flank[0]), vehicleHealth(armor[2]), owners[0]); });
+         }, () -> cooperation[0] && owners[0].contains(anchor[0].getUUID()) && owners[0].contains(flank[0].getUUID()) && vehicleHealth(armor[2]) < 500
+                 && vehicleHealth(armor[0]) > 0 && vehicleHealth(armor[1]) > 0 && Math.abs(armor[0].getZ() - armor[1].getZ()) > 15, 900, true));
+         Bot[] pilot = {null}; Entity[] aircraft = {null}; double[] heightAtWall = {0}; boolean[] flyingSafe = {true}, avoiding = {false};
+@@ -1405,6 +1406,136 @@
+         return list;
+     }
+ 
++    private List<Scenario> warfareCloseRoadScenarios(int y) {
++        List<Scenario> list = new ArrayList<>(); var war = legacy().getSkills().warfare(); var crew = war.crew();
++        for (int trial = 0; trial < 3; trial++) {
++            int index = trial; String model = trial == 2 ? "lav_ad" : "m_1a_2";
++            double x = 24520.5 + trial * 300, distance = trial == 1 ? 28 : 14;
++            Bot[] driver = {null}; Entity[] own = {null}, target = {null}; long[] boarded = {-1}, moved = {-1};
++            double[] travel = {0}; boolean[] intact = {true};
++            list.add(new Scenario("warfare close road " + model + " at " + (int) distance + " blocks starts native combat movement without a street U turn", () -> {
++                warfareFlatArena((int) x - 80, -10, (int) x + 90, 10, y); run("bot settings setgoal nearesthostile");
++                for (int bx = (int) x - 70; bx <= x + 80; bx++) for (int h = 0; h < 4; h++) {
++                    setBlock(bx, y + h, -4, Blocks.BEDROCK.defaultBlockState()); setBlock(bx, y + h, 4, Blocks.BEDROCK.defaultBlockState());
++                }
++                driver[0] = vehicleBot("CloseRoad" + index, 10, x - 2, y, 0.5); driver[0].profileAbilities().put("vehicleweapons", false);
++                own[0] = spawnVehicle(model, x, y, 0.5, -90); target[0] = spawnVehicle("m_1a_2", x + distance, y, 0.5, 90);
++                spawnHusk(x + distance, y, 0.5, 1000, true).startRiding(target[0], true); crew.board(driver[0], own[0], 0);
++                track(() -> {
++                    if (driver[0].getVehicle() == own[0] && boarded[0] < 0) boarded[0] = driver[0].getAliveTicks();
++                    travel[0] = Math.max(travel[0], own[0].position().subtract(new Vec3(x, y, 0.5)).horizontalDistance());
++                    if (travel[0] > 0.5 && moved[0] < 0) moved[0] = driver[0].getAliveTicks();
++                    intact[0] &= vehicleHealth(own[0]) >= (index == 2 ? 290 : 490) && vehicleHealth(target[0]) >= 490
++                            && own[0].getZ() > -1 && own[0].getZ() < 2 && Math.abs(net.minecraft.util.Mth.wrapDegrees(own[0].getYRot() + 90)) < 20;
++                    if (driver[0].getAliveTicks() % 40 == 0) LOGGER.info("[SelfTest] Close road model={} distance={} pos={} boarded={} moved={} travel={} nativeHealth={},{} state={}", model, distance, own[0].position(), boarded[0], moved[0], travel[0], vehicleHealth(own[0]), vehicleHealth(target[0]), war.describe(driver[0]));
++                });
++            }, () -> boarded[0] >= 0 && moved[0] >= boarded[0] && moved[0] - boarded[0] <= 40 && travel[0] > 6
++                    && intact[0] && driver[0].getVehicle() == own[0], 200, true));
++        }
++        for (int order = 0; order < 2; order++) {
++            int direction = order;
++            Bot[] east = {null}, west = {null}; Entity[] pair = new Entity[2]; long[] started = {-1}, firstMove = {-1};
++            boolean[] intact = {true}, backing = {false};
++            list.add(new Scenario("warfare close road allied head on vehicles reverse to a passing area and both continue order " + direction, () -> {
++                warfareFlatArena(25350, -45, 25520, 45, y); run("bot settings setgoal none");
++                for (int bx = 25405; bx <= 25450; bx++) for (int h = 0; h < 4; h++) {
++                    setBlock(bx, y + h, -4, Blocks.BEDROCK.defaultBlockState()); setBlock(bx, y + h, 4, Blocks.BEDROCK.defaultBlockState());
++                }
++                east[0] = vehicleBot("CloseRoadEast", 10, 25418.5, y, 0.5); west[0] = vehicleBot("CloseRoadWest", 10, 25436.5, y, 0.5);
++                testTeam("close_road_friends", east[0], west[0]);
++                pair[0] = spawnVehicle("m_1a_2", 25420.5, y, 0.5, -90, new java.util.UUID(0x4210L, direction == 0 ? 2 : 1));
++                pair[1] = spawnVehicle("m_1a_2", 25434.5, y, 0.5, 90, new java.util.UUID(0x4210L, direction == 0 ? 1 : 2));
++                crew.board(east[0], pair[0], 0); crew.board(west[0], pair[1], 0);
++                crew.go(east[0], new Vec3(25480.5, y, 0.5)); crew.go(west[0], new Vec3(25375.5, y, 0.5));
++                track(() -> {
++                    if (east[0].getVehicle() == pair[0] && west[0].getVehicle() == pair[1] && started[0] < 0) started[0] = east[0].getAliveTicks();
++                    if (firstMove[0] < 0 && (pair[0].position().subtract(new Vec3(25420.5, y, 0.5)).horizontalDistance() > 0.5
++                            || pair[1].position().subtract(new Vec3(25434.5, y, 0.5)).horizontalDistance() > 0.5)) firstMove[0] = east[0].getAliveTicks();
++                    intact[0] &= vehicleHealth(pair[0]) >= 490 && vehicleHealth(pair[1]) >= 490;
++                    backing[0] |= war.describe(east[0]).contains("PASS_TEAM_REVERSE") || war.describe(west[0]).contains("PASS_TEAM_REVERSE");
++                    if (east[0].getAliveTicks() % 100 == 0) LOGGER.info("[SelfTest] Close allied east={} west={} yaw={},{} start={} move={} nativeHealth={},{} state={},{}", pair[0].position(), pair[1].position(), pair[0].getYRot(), pair[1].getYRot(), started[0], firstMove[0], vehicleHealth(pair[0]), vehicleHealth(pair[1]), war.describe(east[0]), war.describe(west[0]));
++                });
++            }, () -> started[0] >= 0 && firstMove[0] >= started[0] && firstMove[0] - started[0] <= 40 && backing[0] && intact[0]
++                    && pair[0].getX() > 25440 && pair[1].getX() < 25415 && east[0].getVehicle() == pair[0] && west[0].getVehicle() == pair[1], 800, true));
++        }
++        Bot[] boxed = {null}; Entity[] blocked = new Entity[3]; boolean[] safe = {true}; double[] motion = {0};
++        list.add(new Scenario("warfare close road rear ally blocks unsafe reversing without native collision damage", () -> {
++            warfareFlatArena(25640, -10, 25810, 10, y); run("bot settings setgoal nearesthostile");
++            for (int bx = 25650; bx <= 25800; bx++) for (int h = 0; h < 4; h++) {
++                setBlock(bx, y + h, -4, Blocks.BEDROCK.defaultBlockState()); setBlock(bx, y + h, 4, Blocks.BEDROCK.defaultBlockState());
++            }
++            boxed[0] = vehicleBot("CloseRoadBoxed", 10, 25718.5, y, 0.5); boxed[0].profileAbilities().put("vehicleweapons", false);
++            blocked[0] = spawnVehicle("m_1a_2", 25720.5, y, 0.5, -90); blocked[1] = spawnVehicle("m_1a_2", 25734.5, y, 0.5, 90);
++            blocked[2] = spawnVehicle("m_1a_2", 25706.5, y, 0.5, -90);
++            spawnHusk(25734.5, y, 0.5, 1000, true).startRiding(blocked[1], true);
++            Husk ally = spawnHusk(25706.5, y, 0.5, 1000, true); ally.startRiding(blocked[2], true);
++            PlayerTeam team = testTeam("close_boxed_ally", boxed[0]); server.getScoreboard().addPlayerToTeam(ally.getScoreboardName(), team);
++            crew.board(boxed[0], blocked[0], 0);
++            track(() -> {
++                motion[0] = Math.max(motion[0], blocked[0].position().subtract(new Vec3(25720.5, y, 0.5)).horizontalDistance());
++                safe[0] &= vehicleHealth(blocked[0]) >= 490 && vehicleHealth(blocked[1]) >= 490 && vehicleHealth(blocked[2]) >= 490;
++            });
++        }, () -> boxed[0].getAliveTicks() >= 130 && boxed[0].getVehicle() == blocked[0] && motion[0] < 1 && safe[0], 180, true));
++        Bot[] gunner = {null}; Entity[] duel = new Entity[2]; long[] firingMove = {-1}; boolean[] firingSafe = {true};
++        java.util.Set<java.util.UUID>[] firingOwners = new java.util.Set[]{null}; double[] firingTravel = {0};
++        list.add(new Scenario("warfare close road reversing tank keeps its native cannon firing and damages hostile armor", () -> {
++            warfareFlatArena(25940, -10, 26110, 10, y); run("bot settings setgoal nearesthostile");
++            for (int bx = 25950; bx <= 26100; bx++) for (int h = 0; h < 4; h++) {
++                setBlock(bx, y + h, -4, Blocks.BEDROCK.defaultBlockState()); setBlock(bx, y + h, 4, Blocks.BEDROCK.defaultBlockState());
++            }
++            gunner[0] = vehicleBot("CloseRoadFire", 10, 26018.5, y, 0.5);
++            duel[0] = spawnVehicle("m_1a_2", 26020.5, y, 0.5, -90); duel[1] = spawnVehicle("m_1a_2", 26034.5, y, 0.5, 90);
++            spawnHusk(26034.5, y, 0.5, 1000, true).startRiding(duel[1], true); crew.board(gunner[0], duel[0], 0);
++            firingOwners[0] = captureNativeOwners(List.of(gunner[0]));
++            track(() -> {
++                firingTravel[0] = Math.max(firingTravel[0], 26020.5 - duel[0].getX());
++                if (firingTravel[0] > 0.5 && firingMove[0] < 0) firingMove[0] = gunner[0].getAliveTicks();
++                firingSafe[0] &= vehicleHealth(duel[0]) >= 490 && duel[0].getZ() > -1 && duel[0].getZ() < 2;
++                if (gunner[0].getAliveTicks() % 80 == 0) LOGGER.info("[SelfTest] Close road fire pos={} move={} travel={} health={},{} owners={} state={}", duel[0].position(), firingMove[0], firingTravel[0], vehicleHealth(duel[0]), vehicleHealth(duel[1]), firingOwners[0], war.describe(gunner[0]));
++            });
++        }, () -> firingMove[0] >= 0 && firingMove[0] <= 40 && firingTravel[0] > 6 && firingSafe[0]
++                && firingOwners[0].contains(gunner[0].getUUID()) && vehicleHealth(duel[1]) < 490 && gunner[0].getVehicle() == duel[0], 400, true));
++        Bot[] active = {null}; Entity[] repeated = new Entity[2]; double[] previous = {0}, forwardTravel = {0}, rearTravel = {0};
++        boolean[] activeSafe = {true};
++        list.add(new Scenario("warfare close road sustained attack makes repeated native forward and rear combat legs", () -> {
++            warfareFlatArena(26240, -10, 26410, 10, y); run("bot settings setgoal nearesthostile");
++            for (int bx = 26250; bx <= 26400; bx++) for (int h = 0; h < 4; h++) {
++                setBlock(bx, y + h, -4, Blocks.BEDROCK.defaultBlockState()); setBlock(bx, y + h, 4, Blocks.BEDROCK.defaultBlockState());
++            }
++            active[0] = vehicleBot("CloseRoadActive", 10, 26318.5, y, 0.5); active[0].profileAbilities().put("vehicleweapons", false);
++            repeated[0] = spawnVehicle("m_1a_2", 26320.5, y, 0.5, -90); repeated[1] = spawnVehicle("m_1a_2", 26348.5, y, 0.5, 90);
++            spawnHusk(26348.5, y, 0.5, 1000, true).startRiding(repeated[1], true); crew.board(active[0], repeated[0], 0); previous[0] = repeated[0].getX();
++            track(() -> {
++                double step = repeated[0].getX() - previous[0]; previous[0] = repeated[0].getX();
++                if (step > 0) forwardTravel[0] += step; else rearTravel[0] -= step;
++                activeSafe[0] &= vehicleHealth(repeated[0]) >= 490 && vehicleHealth(repeated[1]) >= 490 && repeated[0].getZ() > -1 && repeated[0].getZ() < 2;
++                if (active[0].getAliveTicks() % 100 == 0) LOGGER.info("[SelfTest] Close road sustained pos={} forward={} rear={} health={},{} state={}", repeated[0].position(), forwardTravel[0], rearTravel[0], vehicleHealth(repeated[0]), vehicleHealth(repeated[1]), war.describe(active[0]));
++            });
++        }, () -> active[0].getAliveTicks() >= 260 && forwardTravel[0] > 8 && rearTravel[0] > 12 && activeSafe[0] && active[0].getVehicle() == repeated[0], 600, true));
++        for (int order = 0; order < 2; order++) {
++            int priority = order; Bot[] left = {null}, right = {null}; Entity[] group = new Entity[3];
++            java.util.Set<java.util.UUID>[] shellOwners = new java.util.Set[]{null}; boolean[] separated = {true}, flanking = {false};
++            list.add(new Scenario("warfare close road allied open armor keeps its existing flank side and damages enemy in order " + priority, () -> {
++                warfareFlatArena(26550, -80, 26800, 80, y); run("bot settings setgoal nearesthostile");
++                left[0] = vehicleBot("RoadFlankLeft", 10, 26618.5, y, -8.5); right[0] = vehicleBot("RoadFlankRight", 10, 26618.5, y, 10.5);
++                testTeam("close_flank_order", left[0], right[0]);
++                left[0].profileAbilities().put("teamwork", true); right[0].profileAbilities().put("teamwork", true);
++                group[0] = spawnVehicle("m_1a_2", 26620.5, y, -10.5, -90, new java.util.UUID(0x4211L, priority == 0 ? 1 : 2));
++                group[1] = spawnVehicle("m_1a_2", 26620.5, y, 10.5, -90, new java.util.UUID(0x4211L, priority == 0 ? 2 : 1));
++                group[2] = spawnVehicle("m_1a_2", 26680.5, y, 0.5, 90);
++                crew.board(left[0], group[0], 0); crew.board(right[0], group[1], 0);
++                spawnHusk(26680.5, y, 0.5, 1000, true).startRiding(group[2], true); shellOwners[0] = captureNativeOwners(List.of(left[0], right[0]));
++                track(() -> {
++                    separated[0] &= group[0].getZ() < 0.5 && group[1].getZ() > 0.5 && vehicleHealth(group[0]) >= 490 && vehicleHealth(group[1]) >= 490;
++                    flanking[0] |= war.describe(left[0]).contains("TEAM_FLANK") || war.describe(right[0]).contains("TEAM_FLANK");
++                    if (left[0].getAliveTicks() % 80 == 0) LOGGER.info("[SelfTest] Flank order={} pos={},{} health={},{},{} separated={} owners={} state={},{}", priority, group[0].position(), group[1].position(), vehicleHealth(group[0]), vehicleHealth(group[1]), vehicleHealth(group[2]), separated[0], shellOwners[0], war.describe(left[0]), war.describe(right[0]));
++                });
++            }, () -> separated[0] && flanking[0] && Math.abs(group[0].getZ() - group[1].getZ()) > 15
++                    && shellOwners[0].contains(left[0].getUUID()) && shellOwners[0].contains(right[0].getUUID()) && vehicleHealth(group[2]) < 490
++                    && left[0].getVehicle() == group[0] && right[0].getVehicle() == group[1], 400, true));
++        }
++        return list;
++    }
+     private Bot ordnanceBot(String name, int difficulty, double x, int y, double z) {
+         Bot bot = infantry(name, difficulty, x, y, z);
+         bot.profileAbilities().put("guns", false); bot.profileAbilities().put("drones", true);
+@@ -1801,8 +1932,13 @@
+         return list;
+     }
+     private Entity spawnVehicle(String id, double x, int y, double z, float yaw) {
++        return spawnVehicle(id, x, y, z, yaw, null);
++    }
++    private Entity spawnVehicle(String id, double x, int y, double z, float yaw, @javax.annotation.Nullable java.util.UUID uuid) {
+         var type = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.get(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("superbwarfare", id));
+-        Entity entity = Objects.requireNonNull(type.create(level)); entity.moveTo(x, y, z, yaw, 0);
++        Entity entity = Objects.requireNonNull(type.create(level));
++        if (uuid != null) entity.setUUID(uuid);
++        entity.moveTo(x, y, z, yaw, 0);
+         level.addFreshEntity(entity); spawned.add(entity); legacy().getSkills().warfare().vessel(entity).energy(2000000); return entity;
+     }
+     private Bot vehicleBot(String name, int difficulty, double x, int y, double z) {

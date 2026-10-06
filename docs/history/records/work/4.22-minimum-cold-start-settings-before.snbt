@@ -1,0 +1,122 @@
+{
+    AddPlayerList: 0b,
+    Goal: "NONE",
+    JoinMessages: 0b,
+    MobTarget: 0b,
+    Offsets: 0b,
+    Skills: {
+        Abilities: {
+            bow: 1b,
+            c4: 1b,
+            climbing: 1b,
+            criticals: 1b,
+            deception: 1b,
+            drones: 1b,
+            elytra: 1b,
+            guns: 1b,
+            helicopters: 1b,
+            interception: 1b,
+            mace: 1b,
+            missiledefense: 1b,
+            pathfinding: 1b,
+            pearls: 1b,
+            recovery: 1b,
+            retaliate: 1b,
+            shield: 1b,
+            teamwork: 1b,
+            totems: 1b,
+            vehicles: 1b,
+            vehicleweapons: 1b,
+            windcharges: 1b
+        },
+        BuildBlock: "minecraft:cobblestone",
+        Chatter: "mild",
+        DefaultEquipment: 0b,
+        DefaultGear: "vanilla",
+        Hardness: 7,
+        Profiles: {
+            1: {
+                AttackInterval: 38,
+                PressureHits: 3,
+                ReactionTicks: 30,
+                ResumeHealth: 0.7d,
+                RetreatHealth: 0.4d,
+                SkillInterval: 65
+            },
+            10: {
+                AttackInterval: 3,
+                PressureHits: 2,
+                ReactionTicks: 0,
+                ResumeHealth: 0.9d,
+                RetreatHealth: 0.6d,
+                SkillInterval: 5
+            },
+            2: {
+                AttackInterval: 33,
+                PressureHits: 3,
+                ReactionTicks: 25,
+                ResumeHealth: 0.7d,
+                RetreatHealth: 0.4d,
+                SkillInterval: 55
+            },
+            3: {
+                AttackInterval: 28,
+                PressureHits: 3,
+                ReactionTicks: 20,
+                ResumeHealth: 0.7d,
+                RetreatHealth: 0.4d,
+                SkillInterval: 45
+            },
+            4: {
+                AttackInterval: 23,
+                PressureHits: 3,
+                ReactionTicks: 15,
+                ResumeHealth: 0.7d,
+                RetreatHealth: 0.4d,
+                SkillInterval: 35
+            },
+            5: {
+                AttackInterval: 18,
+                PressureHits: 3,
+                ReactionTicks: 10,
+                ResumeHealth: 0.7d,
+                RetreatHealth: 0.4d,
+                SkillInterval: 25
+            },
+            6: {
+                AttackInterval: 13,
+                PressureHits: 3,
+                ReactionTicks: 5,
+                ResumeHealth: 0.7d,
+                RetreatHealth: 0.4d,
+                SkillInterval: 15
+            },
+            7: {
+                AttackInterval: 3,
+                PressureHits: 3,
+                ReactionTicks: 0,
+                ResumeHealth: 0.7d,
+                RetreatHealth: 0.4d,
+                SkillInterval: 5
+            },
+            8: {
+                AttackInterval: 3,
+                PressureHits: 3,
+                ReactionTicks: 0,
+                ResumeHealth: 0.7d,
+                RetreatHealth: 0.4d,
+                SkillInterval: 5
+            },
+            9: {
+                AttackInterval: 3,
+                PressureHits: 3,
+                ReactionTicks: 0,
+                ResumeHealth: 0.8d,
+                RetreatHealth: 0.5d,
+                SkillInterval: 5
+            }
+        },
+        TargetRange: 0.0d
+    },
+    Version: 1
+}

@@ -1,0 +1,51 @@
+TerminatorPlus-NeoForge 4.17.0-BETA 内测验证
+日期：2026-10-05
+Minecraft 1.21.1 / Microsoft OpenJDK 21.0.7
+
+最低版本构建：BUILD SUCCESSFUL，NeoForge 21.1.1，5s。
+最终原生完整专项：80 PASS / 0 FAIL，ALL 80 CHECKS PASSED，10m 3s。
+原生环境：NeoForge 21.1.249 / Superb Warfare 0.8.9.1 / Kotlin for Forge 5.12.0。
+最终基础完整回归：127 PASS / 3 FAIL / 130，9m 19s。
+基础环境：NeoForge 21.1.1，没有安装卓越前线。
+Gradle 成功退出不等于基础场景全部通过。
+
+基础失败（未修复）：
+- equipment border infantry retreats heals and navigates with an inward margin
+- teamdive same side native takeoffs spread before a common smash with far member first
+- teamdive same side native takeoffs spread before a common smash with near member first
+
+修改前 4.16：原生 73/73，基础 128/130，边界步兵与近成员优先俯冲失败。
+本轮远成员优先俯冲也失败，通过数下降一项。步兵生产代码未修改，间接影响未排除；不宣称历史俯冲问题已修复。
+
+新增七个原生场景全部通过：
+长墙/窄口、水沟、迎面同队车流、坦克协作原生伤害、直升机高墙、六车全员绕行与公平搜索、双机分路及双方实际伤害/关闭协同。
+六车实际搜索峰值 24 节点/tick，每车上限 6；这是节点预算检查，不是百人 TPS 测试。
+持续火力测试给仍存活的敌靶恢复生命，保留实际 hurt 和弹丸 owner；参战友军载具没有无敌。
+
+构建命令：
+.\gradlew.bat build --console=plain
+基础命令：
+.\gradlew.bat runSelfTest --console=plain
+原生命令（从本包对应的 outputs/TerminatorPlus-NeoForge 源码目录运行）：
+.\gradlew.bat runSelfTest "-PselftestFocus=warfare" "-PwarfareModsDir=../../work/warfare-test-mods" "-PselftestDir=../../work/warfare-selftest" "-Pneo_version=21.1.249" --console=plain
+两次完整测试顺序运行，均正常关服。测试源码与最后最低版本构建一致。
+
+JAR：TerminatorPlus-NeoForge-1.21.1-4.17.0-BETA.jar
+JAR 字节：731274
+SHA256：CF5BBEC5675E17DCCAD3F0492E35EDB55BF0D92074B1AEF30960FBE1F78A0230
+109 个 src/构建文件与最终测试冻结快照一致；174 个编译类逐字节匹配 JAR。
+元数据为 4.17.0-BETA，NeoForge 下限仍为 [21.1.1,)，显式 AT 保留。
+SBW 源码提交：5b92ebe1da5daad9cc5e8ae28e3e06f1636f5816。
+JAR 与内测 ZIP 包内容/解压后散列逐文件核对；第三方模组/源码/资产不随包提供。
+旧 4.16 JAR / ZIP 的已知 SHA256 核对并保留。
+
+最终日志：
+ai-hardness-4.17.0-build.log
+ai-hardness-4.17.0-selftest.log
+ai-hardness-4.17.0-warfare.log
+早期编译失败、定向场景失败、13 项通过后主动中断的旧代码运行放入 process/，不作为最终完整验收。
+详细过程与研究来源见 docs/validation-4.17.md、docs/vehicle-ai-research-4.17.md。
+
+驱动仅使用原生 keys/mouse；没有提高载具机动力、武器伤害或护甲数值。
+固定翼自动驾驶未实现，复杂坡道/洞穴、真人多人空战和百人 TPS 未验证。
+异线程实验继续暂停。没有操作正式服、部署、Git 提交或推送。

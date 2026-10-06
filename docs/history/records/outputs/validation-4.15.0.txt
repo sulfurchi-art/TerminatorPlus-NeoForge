@@ -1,0 +1,30 @@
+TerminatorPlus-NeoForge 4.15.0-BETA manual playtest
+Validated: 2026-10-05
+Minecraft 1.21.1; Microsoft OpenJDK 21.0.7
+Final build and base regression: minimum NeoForge 21.1.1
+Native integration: NeoForge 21.1.249, Superb Warfare 0.8.9.1, Kotlin for Forge 5.12.0
+SBW locked source commit: 5b92ebe1da5daad9cc5e8ae28e3e06f1636f5816
+Build: SUCCESSFUL
+Base SelfTest: 129 PASS / 1 FAIL / 130 total
+Current base failure names: ['teamdive same side native takeoffs spread before a common smash with near member first']
+First base run: 129 PASS / 1 FAIL, ['cooperation ten assigns bait flank and archer and fires repeated native arrows from range']. Retained as ai-hardness-4.15.0-selftest-first.log.
+Archer focused reruns: four independent ALL 1 CHECKS PASSED, retained as archer-focus-1..4.log.
+The initial archer timeout is not declared fixed; diagnostic logging only was added. Final complete result is reported separately above.
+Native SelfTest: ALL 61 CHECKS PASSED (46 existing and 15 new)
+Mixed native projectiles: max 60 per tick, 2912 total, all 10 owners served.
+Both mounted budget fixtures: native delay 4, 16 projectiles, actual owned bursts.
+Jar: TerminatorPlus-NeoForge-1.21.1-4.15.0-BETA.jar
+Jar bytes: 661913
+SHA256: 813E565136A4E836B89840A529AA398106106CBF715D846B31D4A27B110DB80F
+Jar validation: CRC, version, minimum NeoForge, optional SBW ordering, explicit AT, chatter resources, every compiled main class byte (157 classes).
+No third-party classes or assets bundled. Changes are uncommitted and unpushed.
+
+New checks: independent real duplicate-gun reload deadlines; native normal/empty runtime override; finite ammo debit only at completion; real apple/pearl/elytra during reload; ready backup rifle actual damage before first gun reload ends; pure-gun level ten actual continued damage under mild hits; AH6/M1A2/BMP tail boarding; AH6 nose-cannon actual projectile/damage then extension; real native non-hover transit; observed last-position return; actual helicopter border containment; unique second-vehicle crew reservations; native anti-air flank approach and locked missile finite flare consumption; actual both side-bench rifle damage; roof-target separation and native damage.
+Existing 5v5 starts with two empty guns: all ten owners emit native projectiles, move, and preserve offensive pearls/fireworks inside effective rifle range.
+Production reload/bolt clocks are keyed by actual ItemStack identity. Other hand actions do not interrupt or reset them. Reload completion calls SBW native handlers for finite inventory debit and legal chamber rules. Vehicle reload remains native. Sounds use native SoundInfo events broadcast to nearby players.
+Low-pressure gun combat yields less often; emergency recovery remains. Effective range selection avoids a ready short-range shotgun overriding a cooling rifle at sixty blocks. Level-ten gifted reserve is revoked before due reload on downgrade/disable.
+Vehicle physics remain native keys/mouse. No production writes to vehicle position/velocity/rotation. Flares are finite even at difficulty ten. Native blast safety and heat/delay/projectile budget remain enforced.
+
+Not included: YSM bridge, lower-level passenger admission, convenient finite vehicle supply command, spectator chatter, autonomous tactical grenades/mines/plates, fixed-wing/ship/drone driving, indirect artillery, radar, 10EX. YSM attachment was reviewed and the implementation gap is documented; no real YSM client test was run.
+Historical same-side TeamDive synchronization remains pending even if this run passes. Tests do not establish 100-bot TPS or asynchronous AI. All world/AI work remains on the server thread.
+All tests used isolated servers; no live-server installation or operations. Full combat, complex terrain, guided weapon effectiveness and late-join YSM visuals require future user/client validation.

@@ -1,0 +1,1416 @@
+--- 4.21/src/main/java/net/nuggetmc/tplus/TerminatorPlus.java
++++ 4.22/src/main/java/net/nuggetmc/tplus/TerminatorPlus.java
+@@ -70,6 +70,7 @@
+         bus.addListener(this::onServerStopped);
+         bus.addListener(this::onServerTick);
+         bus.addListener(this::onCombatDamage);
++        bus.addListener(net.neoforged.bus.api.EventPriority.LOWEST, this::onTotem);
+         bus.addListener(net.neoforged.bus.api.EventPriority.LOWEST, this::onPlayerAttack);
+         bus.addListener(this::onCoverBroken);
+         bus.addListener(this::onCoverPlaced);
+@@ -138,12 +139,15 @@
+             catch (java.io.IOException e) { LOGGER.error("Cannot save opponent learning", e); }
+             try { manager.saveSettings(); }
+             catch (IllegalStateException e) { LOGGER.error("Cannot save TerminatorPlus settings", e); }
++            ((net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent) manager.getAgent()).getSkills().battleLog().shutdown();
+             manager.reset();
+         }
+     }
+ 
+     private void onCombatDamage(net.neoforged.neoforge.event.entity.living.LivingDamageEvent.Post event) {
+-        if (manager == null || event.getNewDamage() <= 0 || !(event.getSource().getEntity() instanceof net.minecraft.world.entity.LivingEntity attacker)) return;
++        if (manager == null || event.getNewDamage() <= 0) return;
++        ((net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent) manager.getAgent()).getSkills().battleLog().damage(event.getEntity(), event.getSource(), event.getNewDamage());
++        if (!(event.getSource().getEntity() instanceof net.minecraft.world.entity.LivingEntity attacker)) return;
+         var skills = ((net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent) manager.getAgent()).getSkills();
+         skills.onTeamDamage(event.getEntity(), attacker);
+         if (attacker instanceof Bot bot) {
+@@ -159,6 +163,17 @@
+             ((net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent) manager.getAgent()).getSkills().onPlayerAttack(player, target);
+     }
+ 
++    private void onTotem(net.neoforged.neoforge.event.entity.living.LivingUseTotemEvent event) {
++        if (manager == null || event.isCanceled() || !(event.getEntity() instanceof Bot bot)) return;
++        var log = ((net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent) manager.getAgent()).getSkills().battleLog();
++        if (!log.enabled()) return;
++        ItemStackCapture capture = new ItemStackCapture(event.getTotem(), event.getTotem().getCount());
++        scheduler.runTask(() -> {
++            if (bot.isAlive() && capture.stack().getCount() < capture.count()) log.event("life", "totem", bot, "damageType", event.getSource().getMsgId());
++        });
++    }
++    private record ItemStackCapture(net.minecraft.world.item.ItemStack stack, int count) {}
++
+     private void onCoverBroken(net.neoforged.neoforge.event.level.BlockEvent.BreakEvent event) {
+         if (manager != null && !event.isCanceled() && event.getLevel() instanceof net.minecraft.server.level.ServerLevel world)
+             ((net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent) manager.getAgent()).getSkills().invalidateCover(world, event.getPos());
+@@ -167,7 +182,7 @@
+         if (manager == null || event.isCanceled() || event.getSound() == null || !(event.getLevel() instanceof net.minecraft.server.level.ServerLevel level)) return;
+         var id = event.getSound().value().getLocation();
+         if (id.getNamespace().equals("superbwarfare") && (id.getPath().equals("locked_warning") || id.getPath().equals("locking_warning")))
+-            ((net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent) manager.getAgent()).getSkills().missiles().warning(level, event.getPosition(), level.getServer().getTickCount());
++            ((net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent) manager.getAgent()).getSkills().missiles().warning(level, event.getPosition(), level.getServer().getTickCount(), id.getPath());
+     }
+     private void onCoverPlaced(net.neoforged.neoforge.event.level.BlockEvent.EntityPlaceEvent event) {
+         if (manager != null && !event.isCanceled() && event.getLevel() instanceof net.minecraft.server.level.ServerLevel world)
+@@ -187,6 +202,7 @@
+     }
+ 
+     private void onServerTick(ServerTickEvent.Pre event) {
++        if (manager != null) ((net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent) manager.getAgent()).getSkills().battleLog().tick();
+         if (scheduler != null) {
+             scheduler.tick();
+         }
+--- 4.21/src/main/java/net/nuggetmc/tplus/bot/Bot.java
++++ 4.22/src/main/java/net/nuggetmc/tplus/bot/Bot.java
+@@ -200,10 +200,15 @@
+     private void tickRecoveryItem() {
+         if (!isConsuming()) return;
+         if (--consumableTicks > 0) return;
++        ((LegacyAgent) agent).getSkills().battleLog().event("items", "consume", this, "item", net.nuggetmc.tplus.api.agent.legacyagent.skill.BattleLog.item(getMainHandItem()));
+         ItemStack result = getMainHandItem().finishUsingItem(level(), this);
+         getInventory().items.set(HAND_SLOT, result);
+         cancelRecoveryItem();
+     }
++
++    private String equipmentLabel = "custom";
++    public String equipmentLabel() { return equipmentLabel; }
++    public void equipmentLabel(String value) { equipmentLabel = value; }
+ 
+     public void prepareEquipmentPreset() {
+         ((LegacyAgent) agent).getSkills().ordnance().cancel(this);
+@@ -833,6 +838,7 @@
+         glideTicks = 0;
+         fallDistance = 0;
+         startFallFlying();
++        ((LegacyAgent) agent).getSkills().battleLog().event("items", "elytra_takeoff", this, "reason", ((LegacyAgent) agent).getSkills().memory(this).getFlightPlan().name());
+         return true;
+     }
+ 
+@@ -925,6 +931,7 @@
+         pearl.setItem(stack.copyWithCount(1));
+         pearl.shootFromRotation(this, pitch, yaw, 0.0F, 1.5F, 1.0F);
+         level().addFreshEntity(pearl);
++        ((LegacyAgent) agent).getSkills().battleLog().event("items", "pearl", this, "entity", pearl.getUUID().toString());
+         level().playSound(null, getX(), getY(), getZ(), SoundEvents.ENDER_PEARL_THROW, SoundSource.NEUTRAL, 0.5F,
+                 0.4F / (random.nextFloat() * 0.4F + 0.8F));
+ 
+@@ -1533,12 +1540,15 @@
+ 
+     @Override
+     public void die(DamageSource damageSource) {
++        var log = ((LegacyAgent) agent).getSkills().battleLog();
++        var context = log.deathContext(this, damageSource);
+         stopGliding();
+ 
+         super.die(damageSource);
+ 
+         // the death can be cancelled by other mods (LivingDeathEvent)
+         if (!isAlive()) {
++            log.death(this, damageSource, context);
+             this.dieCheck();
+         }
+     }
+@@ -1711,7 +1721,8 @@
+     }
+ 
+     @Override
+-    public void attemptBlockPlace(BlockPos loc, Block type, boolean down) {
++    public void attemptBlockPlace(BlockPos loc, Block type, boolean down) { attemptBlockPlace(loc, type, down, down ? "build_route" : "legacy_build"); }
++    public void attemptBlockPlace(BlockPos loc, Block type, boolean down, String reason) {
+         if (down) {
+             look(Direction.DOWN);
+         } else {
+@@ -1725,6 +1736,7 @@
+ 
+         if (!LegacyMats.isSolid(world.getBlockState(loc).getBlock())) {
+             world.setBlockAndUpdate(loc, type.defaultBlockState());
++            ((LegacyAgent) agent).getSkills().battleLog().event("items", "block_place", this, "reason", reason, "block", net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(type).toString(), "blockPos", java.util.List.of(loc.getX(), loc.getY(), loc.getZ()));
+             world.playSound(null, loc, SoundEvents.STONE_PLACE, SoundSource.BLOCKS, 1, 1);
+         }
+     }
+--- 4.21/src/main/java/net/nuggetmc/tplus/bot/BotSettingsStore.java
++++ 4.22/src/main/java/net/nuggetmc/tplus/bot/BotSettingsStore.java
+@@ -25,6 +25,7 @@
+     public void load() throws IOException {
+         if (!Files.isRegularFile(file)) { save(); return; }
+         CompoundTag root = SnbtConfig.read(file);
++        var logConfig = net.nuggetmc.tplus.api.agent.legacyagent.skill.BattleLog.Config.read(root.getCompound("BattleLog"));
+         SkillSettings checked = new SkillSettings();
+         checked.load(root.getCompound("Skills"));
+         EnumTargetGoal goal = root.contains("Goal") ? EnumTargetGoal.valueOf(root.getString("Goal")) : agent.getTargetType();
+@@ -45,6 +46,7 @@
+         agent.getSkills().clear();
+         agent.getSkillSettings().load(checked.save());
+         agent.setTargetType(goal);
++        agent.getSkills().battleLog().configure(logConfig);
+         agent.setRegion(bounds, wx, wy, wz);
+         manager.setMobTarget(root.getBoolean("MobTarget"));
+         manager.setAddToPlayerList(root.getBoolean("AddPlayerList"));
+@@ -61,6 +63,7 @@
+         CompoundTag root = new CompoundTag();
+         root.putInt("Version", 1);
+         root.put("Skills", agent.getSkillSettings().save());
++        root.put("BattleLog", agent.getSkills().battleLog().config().save());
+         root.putString("Goal", agent.getTargetType().name());
+         root.putBoolean("MobTarget", manager.isMobTarget());
+         root.putBoolean("AddPlayerList", manager.addToPlayerList());
+--- 4.21/src/main/java/net/nuggetmc/tplus/bot/DefaultEquipment.java
++++ 4.22/src/main/java/net/nuggetmc/tplus/bot/DefaultEquipment.java
+@@ -25,6 +25,7 @@
+ 
+     public static void apply(Bot bot, int level) {
+         if (level < 1 || level > 10) throw new IllegalArgumentException("AI hardness must be 1–10");
++        bot.equipmentLabel("vanilla:" + level);
+         bot.prepareEquipmentPreset();
+         bot.getInventory().clearContent();
+         Item sword = level == 1 ? Items.WOODEN_SWORD : level == 2 ? Items.STONE_SWORD
+@@ -105,6 +106,7 @@
+         }
+         ItemStack helmet = sbw(level <= 3 ? "ge_helmet_m_35" : level <= 7 ? "ru_helmet_6b47" : "us_helmet_pasgt", 1);
+         ItemStack chest = level < 3 ? ItemStack.EMPTY : sbw(level <= 7 ? "ru_chest_6b43" : "us_chest_iotv", 1);
++        bot.equipmentLabel("warfare:" + level);
+         bot.prepareEquipmentPreset(); bot.getInventory().clearContent();
+         bot.setItemSlot(EquipmentSlot.HEAD, helmet); bot.setItemSlot(EquipmentSlot.CHEST, chest);
+         bot.setItemSlot(EquipmentSlot.LEGS, ItemStack.EMPTY); bot.setItemSlot(EquipmentSlot.FEET, ItemStack.EMPTY);
+--- 4.21/src/main/java/net/nuggetmc/tplus/bot/EquipmentPresets.java
++++ 4.22/src/main/java/net/nuggetmc/tplus/bot/EquipmentPresets.java
+@@ -33,6 +33,8 @@
+                 throw new IllegalArgumentException("预设队伍不存在：" + team);
+         }
+         public void apply(Bot bot, boolean applyTeam) {
++            var store = net.nuggetmc.tplus.TerminatorPlus.getManager().presets();
++            bot.equipmentLabel(store.names().stream().filter(n -> store.get(n) == this).findFirst().orElse("custom_preset"));
+             var scoreboard = bot.getServer().getScoreboard();
+             String team = profile.getString("Team");
+             if (applyTeam) validateTeam(bot.getServer());
+--- 4.21/src/main/java/net/nuggetmc/tplus/compat/VehicleCrew.java
++++ 4.22/src/main/java/net/nuggetmc/tplus/compat/VehicleCrew.java
+@@ -20,7 +20,8 @@
+ public final class VehicleCrew {
+     private static final class Member {
+         final Vessel vessel;
+-        int seat, target = -1, scanDirection = 1;
++        int seat, target = -1;
++        long requestedAt;
+         long expires, shots, aimSince, lockSince = -1, nextError, mountedPendingUntil = -1;
+         double errorYaw, errorPitch;
+         boolean leaving;
+@@ -59,6 +60,7 @@
+         return "; crew=" + (bot.getVehicle() == m.vessel.entity() ? "seat " + m.vessel.seatIndex(bot) : "boarding " + m.seat)
+                 + "; vehicleShots=" + m.shots + "; weapon=" + m.weaponState + "; vehiclePilot=" + pilot.describe(m.vessel.entity()) + "; decoys=" + m.vessel.decoys() + (m.leaving ? "; leaving" : "");
+     }
++    public String telemetry(Bot bot) { Member m = members.get(bot); return m == null ? "NONE" : (bot.getVehicle() == m.vessel.entity() ? "seat=" + m.vessel.seatIndex(bot) : "boarding=" + m.seat) + ";weapon=" + m.weaponState + ";nav=" + pilot.telemetry(m.vessel.entity()); }
+     public long shots(Bot bot) { Member m = members.get(bot); return m == null ? 0 : m.shots; }
+ 
+     public Entity findVehicle(Bot bot, String name) {
+@@ -78,6 +80,11 @@
+                 .orElseThrow(() -> new IllegalArgumentException("附近 32 格没有可用的未上锁载具。"));
+     }
+     public void board(Bot bot, Entity entity, int requestedSeat) {
++        skills.battleLog().event("vehicles", "board_request", bot, "requestedVehicle", skills.battleLog().identity(entity), "seat", requestedSeat, "distance", entity == null ? null : bot.distanceTo(entity));
++        try { requestBoard(bot, entity, requestedSeat); }
++        catch (IllegalArgumentException failure) { skills.battleLog().event("vehicles", "board_fail", bot, "reason", failure.getMessage(), "waitTicks", 0); throw failure; }
++    }
++    private void requestBoard(Bot bot, Entity entity, int requestedSeat) {
+         Vessel vessel = warfare.vessel(entity);
+         if (!net.nuggetmc.tplus.api.agent.legacyagent.skill.MovementBounds.contains(entity, entity.position(), 3))
+             throw new IllegalArgumentException("载具须在世界边界内并保留登车空间。");
+@@ -96,7 +103,9 @@
+         if (seat == 0 && !supportsDriver(bot, vessel)) throw new IllegalArgumentException("直升机驾驶需要 9–10 级及 helicopters；该载具引擎类型尚不支持驾驶。");
+         if (bot.isPassenger() && bot.getVehicle() != entity) throw new IllegalArgumentException("机器人正在另一台载具上，先让它离席。");
+         warfare.release(bot); bot.stopGliding();
+-        members.put(bot, new Member(vessel, seat, bot.server.getTickCount() + 400L));
++        Member request = new Member(vessel, seat, bot.server.getTickCount() + 400L); request.requestedAt = bot.server.getTickCount();
++        members.put(bot, request);
++
+     }
+     public int boardCrew(Bot leader, Entity entity) {
+         List<Bot> team = new ArrayList<>(); team.add(leader);
+@@ -159,17 +168,22 @@
+             if (m == null) return false;
+         }
+         Vessel v = m.vessel; Entity entity = v.entity();
+-        if (entity.isRemoved() || entity.level() != bot.level()) { forget(bot); return false; }
++        if (entity.isRemoved() || entity.level() != bot.level()) {
++            if (!bot.isPassenger()) skills.battleLog().event("vehicles", "board_fail", bot, "reason", entity.isRemoved() ? "vehicle_removed" : "dimension_changed", "waitTicks", now - m.requestedAt, "distance", bot.distanceTo(entity));
++            forget(bot); return false;
++        }
+         if (!bot.isPassenger()) {
+             if (m.leaving || now > m.expires || v.locked() || v.wreck() || !skills.enabled(bot, "vehicles") && !v.engine().equals("FIXED")) {
++                skills.battleLog().event("vehicles", "board_fail", bot, "requestedVehicle", skills.battleLog().identity(entity), "reason", m.leaving ? "cancelled" : now > m.expires ? "timeout" : v.locked() ? "locked" : v.wreck() ? "wreck" : "ability_disabled", "waitTicks", now - m.requestedAt, "distance", bot.distanceTo(entity));
+                 forget(bot); boardingRest.put(bot, now + 100); return false;
+             }
+             if (bot.canInteractWithEntity(entity.getBoundingBox(), 0) && bot.level().clip(new ClipContext(bot.getEyePosition(), entity.getBoundingBox().getCenter(),
+                     ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, bot)).getType() == HitResult.Type.MISS && v.board(bot, m.seat)) {
++                skills.battleLog().event("vehicles", "board_ok", bot, "waitTicks", now - m.requestedAt, "distance", bot.distanceTo(entity));
+                 m.expires = Long.MAX_VALUE; bot.walk(Vec3.ZERO); bot.setLook(entity.getYRot(), 0);
+             } else {
+                 Vec3 delta = entity.position().subtract(bot.position());
+-                if (delta.lengthSqr() > 48 * 48) { forget(bot); return false; }
++                if (delta.lengthSqr() > 48 * 48) { skills.battleLog().event("vehicles", "board_fail", bot, "reason", "vehicle_moved_out_of_range", "waitTicks", now - m.requestedAt, "distance", delta.length()); forget(bot); return false; }
+                 approachEntry(bot, m, now);
+                 warfare.release(bot); return true;
+             }
+@@ -187,9 +201,11 @@
+                 if (!m.leaving && !evacuate) return true;
+                 if (!v.wreck() && now <= m.mountedPendingUntil) return true;
+                 if (m.seat == 0) v.input(bot, 16, 0, 0);
++                skills.battleLog().event("vehicles", "evacuate", bot, "reason", v.wreck() ? "wreck" : evacuate ? "low_vehicle_health" : "requested", "healthRatio", v.health() / v.maxHealth());
+                 bot.stopRiding(); forget(bot); boardingRest.put(bot, now + 200); return true;
+             }
+             if (v.wreck() && bot.hasUsableElytra()) {
++                skills.battleLog().event("vehicles", "evacuate", bot, "reason", "airborne_wreck", "healthRatio", v.health() / v.maxHealth());
+                 bot.stopRiding(); forget(bot); bot.startGliding(); boardingRest.put(bot, now + 200); return true;
+             }
+             // The pilot lands first. Other members stay aboard until a safe dismount is possible.
+@@ -197,18 +213,14 @@
+             return true;
+         }
+         if (now > m.mountedPendingUntil && v.passenger(0) == null && supportsDriver(bot, v) && v.seats().size() > 0 && free(v, 0, bot)) {
+-            if (v.changeSeat(bot, 0)) m.seat = 0;
++            int from = m.seat;
++            if (v.changeSeat(bot, 0)) { m.seat = 0; skills.battleLog().event("vehicles", "seat_change", bot, "from", from, "to", 0, "reason", "vacant_driver"); }
+         }
+         if (m.seat == 0) {
+             boolean pending = members.entrySet().stream().anyMatch(e -> e.getKey() != bot && e.getValue().vessel.entity() == entity
+                     && !e.getKey().isPassenger() && !e.getValue().leaving && now < e.getValue().expires);
+             if (supportsDriver(bot, v)) pilot.tick(bot, v, enemy, now, false, pending);
+             else { v.input(bot, v.engine().equals("HELICOPTER") ? 0 : 16, 0, 0); }
+-        }
+-        if (enemy == null && (canUseHand(bot) || skills.enabled(bot, "vehicleweapons")) && now % 5 == 0) {
+-            float before = bot.getYRot();
+-            bot.setLook(before + m.scanDirection * (3 + skills.hardness(bot).level()), 0); v.clampLook(bot);
+-            if (Math.abs(Mth.wrapDegrees(bot.getYRot() - before)) < 1) m.scanDirection = -m.scanDirection;
+         }
+         if (skills.enabled(bot, "recovery") && bot.getHealth() < bot.getMaxHealth() * 0.6 && canUseHand(bot)) bot.beginRecoveryItem(false);
+         if (!bot.isConsuming() && skills.enabled(bot, "vehicleweapons") && mounted(bot, m, ship, enemy, observedVelocity, now)) {
+@@ -318,23 +330,28 @@
+         if (target.getPassengers().stream().anyMatch(bot::isAlliedTo)) return false;
+         List<MountedWeapon> weapons = v.weapons(bot); if (weapons.isEmpty()) return false;
+         double distance = v.muzzle(bot).distanceTo(target.getBoundingBox().getCenter());
++        java.util.List<String> rejected = skills.battleLog().enabled() ? new ArrayList<>() : null;
+         MountedWeapon best = null; double score = -Double.MAX_VALUE;
+         for (MountedWeapon w : weapons) {
+             Specs spec = w.specs();
+             if ((!w.ready() && w.reserve() <= 0) || spec.projectiles() < 1 || spec.projectiles() > 64
+-                    || spec.shootDelay() > 200 || distance > Math.min(256, spec.range()) || spec.explosionRadius() > 0 && distance < spec.explosionRadius() + 5) continue;
+-            if (spec.seekTime() > 0 && !warfare.access().isVehicle(target) && !target.isPassenger()) continue;
++                    || spec.shootDelay() > 200 || distance > Math.min(256, spec.range()) || spec.explosionRadius() > 0 && distance < spec.explosionRadius() + 5) { if (rejected != null) rejected.add(w.name() + ":ammo_or_range_or_unsafe_blast"); continue; }
++            if (spec.seekTime() > 0 && !warfare.access().isVehicle(target) && !target.isPassenger()) { if (rejected != null) rejected.add(w.name() + ":requires_vehicle_lock"); continue; }
+             double value = w.ready() ? 8 : 0;
+             if (warfare.access().isVehicle(target)) {
+                 double effective = warfare.access().vehicleDamage(target, bot, v.weaponGun(bot, w.index()));
+-                if (effective <= 0) continue;
++                if (effective <= 0) { if (rejected != null) rejected.add(w.name() + ":no_effective_vehicle_damage"); continue; }
+                 value += Math.log1p(effective) * 5;
+             } else value += (spec.rpm() >= 300 ? 10 : 0) + Math.min(4, spec.damage() * 0.02) - spec.explosionRadius()
+                     + (spec.explosionRadius() == 0 && (spec.magazine() == 0 || spec.magazine() > 5) ? 14 : 0);
+             if (w.index() == v.selectedWeapon(bot)) value += 0.5;
+             if (value > score) { best = w; score = value; }
+         }
+-        if (best == null) { m.weaponState = "no usable weapon"; return false; }
++        if (best == null) {
++            if (!m.weaponState.equals("no usable weapon")) skills.battleLog().event("weapons", "weapon_select", bot, "weapon", null, "reason", "no usable weapon", "rejected", rejected);
++            m.weaponState = "no usable weapon"; return false;
++        }
++        if (!best.name().equals(m.weaponState)) skills.battleLog().event("weapons", "weapon_select", bot, "weapon", best.name(), "reason", "seat_range_ammo_effective_damage_score", "rejected", rejected);
+         if (v.selectedWeapon(bot) != best.index()) { v.selectWeapon(bot, best.index()); m.aimSince = now; m.lockSince = -1; }
+         if (m.target != target.getId()) { m.target = target.getId(); m.aimSince = now; m.lockSince = -1; }
+         m.weaponState = best.name();
+--- 4.21/src/main/java/net/nuggetmc/tplus/compat/VehiclePilot.java
++++ 4.22/src/main/java/net/nuggetmc/tplus/compat/VehiclePilot.java
+@@ -68,6 +68,7 @@
+     String describe(Entity vessel) { Flight f = flights.get(vessel); return f == null ? "IDLE" : f.phase + " nav=" + f.route.state + "/" + f.route.expanded
+                 + (f.route.problem == null ? "" : " terrain=" + f.route.problem.reason() + "@" + f.route.problem.position().toShortString())
+                 + (f.trafficGoal == null ? "" : " traffic=" + BlockPos.containing(f.trafficGoal).toShortString()); }
++    String telemetry(Entity vessel) { Flight f = flights.get(vessel); return f == null ? "IDLE" : f.phase + "/" + f.route.state; }
+     boolean hasWaypoint(Entity vessel) { Flight f = flights.get(vessel); return f != null && f.waypoint != null; }
+ 
+     boolean tick(Bot bot, Vessel vessel, @Nullable LivingEntity enemy, long now, boolean land, boolean waitForCrew) {
+--- 4.21/src/main/java/net/nuggetmc/tplus/compat/WarfareAccess.java
++++ 4.22/src/main/java/net/nuggetmc/tplus/compat/WarfareAccess.java
+@@ -61,6 +61,7 @@
+         boolean wreck();
+         float health();
+         float maxHealth();
++        default java.util.Map<String, Float> partHealth() { return java.util.Map.of(); }
+         int energy();
+         int maxEnergy();
+         void energy(int value);
+--- 4.21/src/main/java/net/nuggetmc/tplus/compat/WarfareSupport.java
++++ 4.22/src/main/java/net/nuggetmc/tplus/compat/WarfareSupport.java
+@@ -69,6 +69,7 @@
+         try {
+             access = (WarfareAccess) Class.forName("net.nuggetmc.tplus.compat.superbwarfare.SuperbWarfareAccess")
+                     .getConstructor().newInstance();
++            net.nuggetmc.tplus.compat.superbwarfare.NativeBattleEvents.register();
+             status = "SBW 0.8.9.1 ready";
+             LOGGER.info("TerminatorPlus {}", status);
+         } catch (ReflectiveOperationException | LinkageError | RuntimeException e) { disable(e); }
+@@ -325,6 +326,7 @@
+             if (chosen == null) { release(bot); return false; }
+             if (s.held == null || s.held.stack() != chosen.stack()) {
+                 if (!hold(bot, s, chosen, now)) return false;
++                skills.battleLog().event("weapons", "weapon_select", bot, "weapon", net.nuggetmc.tplus.api.agent.legacyagent.skill.BattleLog.itemId(chosen.stack()), "reason", "available_ammo_range_damage_score");
+                 s.nextShot = Math.max(s.nextShot, now + 4 + (10 - difficulty) * 2);
+             }
+         }
+--- 4.21/src/main/java/net/nuggetmc/tplus/utils/BattleLogWriter.java
++++ 4.22/src/main/java/net/nuggetmc/tplus/utils/BattleLogWriter.java
+@@ -0,0 +1,68 @@
++package net.nuggetmc.tplus.utils;
++
++import java.io.BufferedWriter;
++import java.io.IOException;
++import java.nio.charset.StandardCharsets;
++import java.nio.file.Files;
++import java.nio.file.Path;
++import java.nio.file.StandardOpenOption;
++import java.util.concurrent.ArrayBlockingQueue;
++import java.util.concurrent.TimeUnit;
++import java.util.concurrent.atomic.AtomicLong;
++
++/** The writer accepts immutable JSON strings only. No Minecraft object crosses this boundary. */
++public final class BattleLogWriter implements AutoCloseable {
++    private final ArrayBlockingQueue<String> queue;
++    private final Thread worker;
++    private final Path path;
++    private final AtomicLong dropped = new AtomicLong();
++    private volatile long written;
++    private volatile boolean closing;
++    private volatile String error;
++
++    public BattleLogWriter(Path path) { this(path, 16384); }
++    public BattleLogWriter(Path path, int capacity) {
++        this.path = path;
++        queue = new ArrayBlockingQueue<>(capacity);
++        worker = new Thread(this::write, "terminatorplus-battle-log");
++        worker.setDaemon(true);
++        worker.start();
++    }
++    public boolean offer(String json) {
++        if (closing || error != null) return false;
++        if (queue.offer(json)) return true;
++        dropped.incrementAndGet();
++        return false;
++    }
++    private void write() {
++        try {
++            Files.createDirectories(path.getParent());
++            try (BufferedWriter out = Files.newBufferedWriter(path, StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW)) {
++                long reported = 0, lastFlush = System.nanoTime();
++                while (!closing || !queue.isEmpty()) {
++                    String line = queue.poll(100, TimeUnit.MILLISECONDS);
++                    if (line != null) { out.write(line); out.newLine(); written++; }
++                    long loss = dropped.get();
++                    if (loss != reported) {
++                        out.write("{\"type\":\"log_gap\",\"dropped\":" + (loss - reported) + ",\"totalDropped\":" + loss + "}");
++                        out.newLine(); reported = loss;
++                    }
++                    if (System.nanoTime() - lastFlush >= TimeUnit.SECONDS.toNanos(1)) { out.flush(); lastFlush = System.nanoTime(); }
++                }
++            }
++        } catch (IOException | InterruptedException failure) {
++            error = failure.toString(); queue.clear();
++            com.mojang.logging.LogUtils.getLogger().error("Battle log disabled after file I/O failure: {}", path, failure);
++            if (failure instanceof InterruptedException) Thread.currentThread().interrupt();
++        }
++    }
++    public Path path() { return path; }
++    public long written() { return written; }
++    public long dropped() { return dropped.get(); }
++    public int queued() { return queue.size(); }
++    public String error() { return error; }
++    public boolean closed() { return !worker.isAlive(); }
++    @Override public void close() { closing = true; }
++    /** Shutdown/test use only; never call from an AI tick. */
++    public boolean awaitClosed(long millis) throws InterruptedException { worker.join(millis); return closed(); }
++}
+--- 4.21/src/main/java/net/nuggetmc/tplus/api/agent/legacyagent/LegacyAgent.java
++++ 4.22/src/main/java/net/nuggetmc/tplus/api/agent/legacyagent/LegacyAgent.java
+@@ -171,7 +171,7 @@
+ 
+     private void tickBot(Terminator bot) {
+         try { tickBotActions(bot); }
+-        finally { if (bot.isBotAlive()) skills.finishWeapons(bot); }
++        finally { if (bot.isBotAlive()) { skills.finishWeapons(bot); if (bot instanceof net.nuggetmc.tplus.bot.Bot b) skills.battleLog().observe(b); } }
+     }
+ 
+     private void tickBotActions(Terminator bot) {
+@@ -1415,6 +1415,7 @@
+     public void setTargetType(EnumTargetGoal goal) {
+         if (this.goal != goal) skills.clearTeamFocus();
+         this.goal = goal;
++        skills.battleLog().goal(goal);
+     }
+ 
+     /**
+--- 4.21/src/main/java/net/nuggetmc/tplus/api/agent/legacyagent/skill/BattleLog.java
++++ 4.22/src/main/java/net/nuggetmc/tplus/api/agent/legacyagent/skill/BattleLog.java
+@@ -0,0 +1,240 @@
++package net.nuggetmc.tplus.api.agent.legacyagent.skill;
++
++import com.google.gson.GsonBuilder;
++import net.minecraft.core.registries.BuiltInRegistries;
++import net.minecraft.nbt.CompoundTag;
++import net.minecraft.world.damagesource.DamageSource;
++import net.minecraft.world.entity.Entity;
++import net.minecraft.world.entity.LivingEntity;
++import net.minecraft.world.item.ItemStack;
++import net.minecraft.world.phys.Vec3;
++import net.nuggetmc.tplus.api.agent.legacyagent.EnumTargetGoal;
++import net.nuggetmc.tplus.bot.Bot;
++import net.nuggetmc.tplus.utils.BattleLogWriter;
++
++import java.nio.file.Path;
++import java.time.LocalDateTime;
++import java.time.format.DateTimeFormatter;
++import java.util.*;
++
++/** Main-thread observation and JSON serialization; only immutable lines enter the bounded I/O queue. */
++public final class BattleLog implements AutoCloseable {
++    private static final com.google.gson.Gson JSON = new GsonBuilder().serializeNulls().disableHtmlEscaping().create();
++    private static final List<String> CATEGORIES = List.of("life", "damage", "tactics", "weapons", "vehicles", "drones", "c4", "missiles", "items", "snap", "summary");
++    public record Config(boolean enabled, int snapshotTicks, Set<String> categories) {
++        public static Config read(CompoundTag tag) {
++            int interval = tag.contains("SnapshotTicks") ? tag.getInt("SnapshotTicks") : 40;
++            if (interval < 1 || interval > 12000) throw new IllegalArgumentException("BattleLog.SnapshotTicks must be 1..12000");
++            Set<String> enabled = new HashSet<>(); CompoundTag categories = tag.getCompound("Categories");
++            for (String key : categories.getAllKeys()) if (!CATEGORIES.contains(key)) throw new IllegalArgumentException("Unknown BattleLog category: " + key);
++            for (String key : CATEGORIES) if (!categories.contains(key) || categories.getBoolean(key)) enabled.add(key);
++            return new Config(tag.getBoolean("Enabled"), interval, Set.copyOf(enabled));
++        }
++        public CompoundTag save() {
++            CompoundTag tag = new CompoundTag(), cats = new CompoundTag();
++            tag.putBoolean("Enabled", enabled); tag.putInt("SnapshotTicks", snapshotTicks);
++            for (String key : CATEGORIES) cats.putBoolean(key, categories.contains(key));
++            tag.put("Categories", cats); return tag;
++        }
++    }
++    private static final class Watch {
++        UUID target; String tactic, role, flight, crew;
++        long historyDroppedAt = -1000;
++        final Deque<Map<String, Object>> damage = new ArrayDeque<>();
++    }
++    private static final class Stats {
++        String name; long kills, deaths, fire, hits; double dealt, taken;
++        final Map<String, Long> counts = new TreeMap<>(), durations = new TreeMap<>();
++        Map<String, Object> json() {
++            Map<String, Object> average = new TreeMap<>();
++            durations.forEach((k, v) -> average.put(k, (double) v / Math.max(1, counts.getOrDefault(k, 0L))));
++            return data("bot", name, "kills", kills, "deaths", deaths, "damageDealt", dealt, "damageTaken", taken,
++                    "fire", fire, "confirmedDamageEvents", hits, "counts", counts, "averageTicks", average);
++        }
++    }
++    private final BotSkills skills;
++    private final net.nuggetmc.tplus.api.BotManager manager;
++    private Config config = Config.read(new CompoundTag());
++    private BattleLogWriter writer;
++    private final List<BattleLogWriter> retiring = new ArrayList<>();
++    private final Map<UUID, Watch> watches = new HashMap<>();
++    private final Map<UUID, Stats> stats = new LinkedHashMap<>();
++    private final Map<UUID, Double> vehicleHealth = new HashMap<>();
++    private final Map<UUID, Entity> trackedVehicles = new LinkedHashMap<>();
++    private final Map<UUID, Bot> vehicleObservers = new HashMap<>();
++    private final Map<UUID, Map<String, Float>> vehicleParts = new HashMap<>();
++    private final Set<UUID> destroyed = new HashSet<>();
++    private final Map<UUID, Integer> decoys = new HashMap<>();
++    private EnumTargetGoal goal = EnumTargetGoal.NONE;
++    private boolean match;
++    private long started;
++    BattleLog(BotSkills skills, net.nuggetmc.tplus.api.BotManager manager) { this.skills = skills; this.manager = manager; }
++    public Config config() { return config; }
++    public boolean enabled() { return config.enabled && writer != null && writer.error() == null; }
++    public Path path() { return writer == null ? null : writer.path(); }
++    public long dropped() { return writer == null ? 0 : writer.dropped(); }
++    public String status() { return "BattleLog=" + enabled() + "; snapshotTicks=" + config.snapshotTicks + "; file=" + path()
++            + (writer == null ? "" : "; queued=" + writer.queued() + "; written=" + writer.written() + "; dropped=" + writer.dropped() + "; error=" + writer.error()); }
++    public void configure(Config next) {
++        retiring.removeIf(BattleLogWriter::closed);
++        if (config.enabled && !next.enabled) close();
++        config = next;
++        if (next.enabled && writer == null) {
++            goal = ((net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent) manager.getAgent()).getTargetType();
++            Path file = Path.of("logs", "terminatorplus", "battle-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm-ss-SSS")) + "-" + UUID.randomUUID().toString().substring(0, 8) + ".jsonl").toAbsolutePath();
++            writer = new BattleLogWriter(file);
++            emit("meta", "log_start", null, data("version", net.nuggetmc.tplus.TerminatorPlus.getVersion(), "config", next.save().toString(), "schema", 1));
++            if (goal != EnumTargetGoal.NONE) begin();
++        }
++    }
++    public void toggle(boolean enabled) { configure(new Config(enabled, config.snapshotTicks, config.categories)); }
++    private long now() { return manager.getServer().getTickCount(); }
++    public static Map<String, Object> data(Object... pairs) {
++        Map<String, Object> result = new LinkedHashMap<>();
++        for (int i = 0; i < pairs.length; i += 2) result.put((String) pairs[i], pairs[i + 1]);
++        return result;
++    }
++    private static double tenth(double v) { return Math.round(v * 10) / 10.0; }
++    public static List<Double> pos(Vec3 v) { return List.of(tenth(v.x), tenth(v.y), tenth(v.z)); }
++    public Map<String, Object> identity(Entity entity) {
++        if (entity == null) return null;
++        Map<String, Object> out = data("id", BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString(), "uuid", entity.getUUID().toString(), "name", entity.getName().getString(), "pos", pos(entity.position()));
++        Entity vehicle = entity.getVehicle();
++        if (vehicle != null) out.put("vehicle", vehicle(vehicle, entity));
++        return out;
++    }
++    private Map<String, Object> vehicle(Entity entity, Entity occupant) {
++        int seat = -1;
++        if (skills.warfare().available() && skills.warfare().access().isVehicle(entity)) seat = skills.warfare().access().vessel(entity).seatIndex(occupant);
++        return data("id", BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString(), "uuid", entity.getUUID().toString().substring(0, 8), "fullUuid", entity.getUUID().toString(), "seat", seat);
++    }
++    public void event(String category, String type, Bot bot, Object... pairs) {
++        if (!enabled()) return;
++        Stats s = bot == null ? null : stat(bot);
++        if (s != null) s.counts.merge(type, 1L, Long::sum);
++        Map<String, Object> extra = data(pairs);
++        if (s != null && extra.get("durationTicks") instanceof Number n) s.durations.merge(type, n.longValue(), Long::sum);
++        emit(category, type, bot, extra);
++    }
++    private void emit(String category, String type, Bot bot, Map<String, Object> extra) {
++        if (!enabled() || !category.equals("meta") && !config.categories.contains(category)) return;
++        Map<String, Object> event = data("tick", now(), "time", LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss.SSS")), "type", type);
++        if (bot != null) {
++            event.putAll(data("bot", bot.getBotName(), "uuid", bot.getUUID().toString(), "team", bot.getTeam() == null ? null : bot.getTeam().getName(), "level", bot.hardness().level(), "pos", pos(bot.position()), "dimension", bot.level().dimension().location().toString()));
++            if (bot.getVehicle() != null) event.put("vehicle", vehicle(bot.getVehicle(), bot));
++        }
++        event.putAll(extra); writer.offer(JSON.toJson(event));
++    }
++    private Stats stat(Bot bot) {
++        if (stats.size() >= 4096 && !stats.containsKey(bot.getUUID())) stats.remove(stats.keySet().iterator().next());
++        Stats s = stats.computeIfAbsent(bot.getUUID(), key -> new Stats()); s.name = bot.getBotName(); return s;
++    }
++    public void goal(EnumTargetGoal next) {
++        EnumTargetGoal previous = goal; goal = next;
++        if (previous != next && enabled()) {
++            if (next == EnumTargetGoal.NONE) end("goal_none");
++            else if (!match) begin();
++        }
++    }
++    private void begin() {
++        stats.clear(); match = true; started = now();
++        event("meta", "match_start", null, "goal", goal.name());
++    }
++    private void end(String reason) {
++        if (!match) return;
++        event("meta", "match_end", null, "reason", reason, "durationTicks", now() - started);
++        event("summary", "summary", null, "bots", stats.values().stream().map(Stats::json).toList(), "dropped", dropped()); match = false;
++    }
++    public void mark(String text) { event("meta", "mark", null, "text", text); }
++    public void observe(Bot bot) {
++        if (!enabled()) return;
++        retiring.removeIf(BattleLogWriter::closed);
++        stat(bot); Watch w = watches.get(bot.getUUID()); BotMemory mem = skills.memory(bot);
++        if (w == null) {
++            w = new Watch(); watches.put(bot.getUUID(), w);
++            event("life", "spawn", bot, "preset", bot.equipmentLabel(), "equipment", bot.getInventory().items.stream().filter(i -> !i.isEmpty()).map(BattleLog::item).toList(),
++                    "armor", java.util.stream.StreamSupport.stream(bot.getArmorSlots().spliterator(), false).map(BattleLog::item).toList());
++        }
++        LivingEntity target = skills.currentTarget(bot); UUID tid = target == null ? null : target.getUUID();
++        if (!Objects.equals(tid, w.target)) { w.target = tid; event("tactics", "target", bot, "target", identity(target), "distance", target == null ? null : tenth(bot.distanceTo(target)), "reason", "agent_" + goal.name()); }
++        if (!mem.tactic.name().equals(w.tactic)) { w.tactic = mem.tactic.name(); event("tactics", "tactic", bot, "state", w.tactic); }
++        if (!mem.teamRole.name().equals(w.role)) { w.role = mem.teamRole.name(); event("tactics", "role", bot, "state", w.role); }
++        String flight = mem.flight + "/" + mem.plan;
++        if (!flight.equals(w.flight)) { w.flight = flight; event("items", "flight", bot, "state", flight); }
++        String crew = skills.warfare().crew().telemetry(bot);
++        if (!Objects.equals(crew, w.crew)) { w.crew = crew; event("vehicles", "nav", bot, "state", crew); }
++        if (now() % config.snapshotTicks == 0) event("snap", "snap", bot, "health", bot.getHealth(), "target", identity(target), "tactic", w.tactic, "role", w.role);
++    }
++    public void tick() {
++        if (!enabled()) return;
++        for (var terminator : skills.bots()) if (terminator instanceof Bot bot && bot.getVehicle() != null && skills.warfare().isVehicle(bot.getVehicle())) {
++            Entity e = bot.getVehicle();
++            if (trackedVehicles.size() >= 1024 && !trackedVehicles.containsKey(e.getUUID())) removeVehicle(trackedVehicles.keySet().iterator().next());
++            trackedVehicles.put(e.getUUID(), e); vehicleObservers.put(e.getUUID(), bot);
++        }
++        for (UUID id : List.copyOf(trackedVehicles.keySet())) {
++            Entity e = trackedVehicles.get(id); Bot bot = vehicleObservers.get(id);
++            if (!skills.warfare().isVehicle(e)) { removeVehicle(id); continue; }
++            var v = skills.warfare().access().vessel(e);
++            Double previous = vehicleHealth.put(id, (double) v.health());
++            Map<String, Float> parts = v.partHealth(), oldParts = vehicleParts.put(id, parts);
++            if (previous != null && (previous > v.health() || oldParts != null && parts.entrySet().stream().anyMatch(p -> p.getValue() < oldParts.getOrDefault(p.getKey(), p.getValue()))))
++                event("vehicles", "vehicle_damage", bot, "vehicle", vehicle(e, bot), "health", v.health(), "maxHealth", v.maxHealth(), "damage", previous - v.health(), "parts", parts);
++            if (v.wreck() && destroyed.add(id)) event("vehicles", "vehicle_destroyed", bot, "vehicle", vehicle(e, bot), "health", v.health());
++            Integer old = decoys.put(id, v.decoys());
++            if (old != null && old > v.decoys()) event("missiles", "decoy", bot, "vehicle", vehicle(e, bot), "count", old - v.decoys(), "remaining", v.decoys());
++            if (now() % config.snapshotTicks == 0 && !e.getPassengers().isEmpty()) event("snap", "vehicle_snap", bot, "vehicle", vehicle(e, bot), "pos", pos(e.position()), "health", v.health(), "maxHealth", v.maxHealth(), "parts", parts, "energy", v.energy(), "maxEnergy", v.maxEnergy(), "crew", e.getPassengers().stream().map(this::identity).toList());
++            if (e.isRemoved() || e.getPassengers().isEmpty()) removeVehicle(id);
++        }
++    }
++    private void removeVehicle(UUID id) {
++        trackedVehicles.remove(id); vehicleObservers.remove(id); vehicleHealth.remove(id); vehicleParts.remove(id); decoys.remove(id); destroyed.remove(id);
++    }
++
++    public static String itemId(ItemStack stack) { return BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(); }
++    public static String item(ItemStack stack) { return stack.isEmpty() ? "minecraft:air" : BuiltInRegistries.ITEM.getKey(stack.getItem()) + "*" + stack.getCount(); }
++    private Map<String, Object> damageData(LivingEntity victim, DamageSource source, float value) {
++        Entity attacker = source.getEntity(); String type = source.typeHolder().unwrapKey().map(k -> k.location().toString()).orElse(source.getMsgId());
++        return data("attacker", identity(attacker), "victim", identity(victim), "value", value, "damageType", type,
++                "weapon", attacker instanceof LivingEntity living ? itemId(living.getMainHandItem()) : null, "weaponSource", "attacker_current_hand",
++                "projectile", source.getDirectEntity() == attacker ? null : identity(source.getDirectEntity()), "distance", attacker == null ? null : tenth(attacker.distanceTo(victim)), "headshot", type.contains("headshot"), "health", victim.getHealth());
++    }
++    public void damage(LivingEntity victim, DamageSource source, float value) {
++        if (!enabled() || value <= 0) return;
++        Bot bot = victim instanceof Bot b ? b : source.getEntity() instanceof Bot b ? b : null;
++        if (bot == null) return;
++        Map<String, Object> d = damageData(victim, source, value); d.put("tick", now());
++        if (victim instanceof Bot b) {
++            stat(b).taken += value; Watch w = watches.computeIfAbsent(b.getUUID(), k -> new Watch());
++            w.damage.addLast(d);
++            while (w.damage.size() > 128) { w.historyDroppedAt = now(); w.damage.removeFirst(); }
++            while (!w.damage.isEmpty() && ((Number) w.damage.getFirst().get("tick")).longValue() < now() - 100) w.damage.removeFirst();
++        }
++        if (source.getEntity() instanceof Bot b) { stat(b).dealt += value; stat(b).hits++; }
++        emit("damage", "damage", bot, d);
++    }
++    public Map<String, Object> deathContext(Bot bot, DamageSource source) { return enabled() ? damageData(bot, source, 0) : null; }
++    public void death(Bot bot, DamageSource source, Map<String, Object> context) {
++        if (!enabled() || context == null) return;
++        stat(bot).deaths++; if (source.getEntity() instanceof Bot killer) stat(killer).kills++;
++        Watch w = watches.get(bot.getUUID()); context.put("recentDamage", w == null ? List.of() : w.damage.stream().filter(d -> ((Number) d.get("tick")).longValue() >= now() - 100).toList());
++        context.put("recentDamageTruncated", w != null && now() - w.historyDroppedAt <= 100);
++        emit("life", "death", bot, context);
++    }
++    public void fire(Bot bot, String weapon, Entity target, String kind) {
++        if (!enabled()) return;
++        stat(bot).fire++; event("weapons", "fire", bot, "weapon", weapon, "kind", kind, "target", identity(target), "distance", target == null ? null : tenth(bot.distanceTo(target)), "hit", null);
++    }
++    public void forget(Bot bot) { watches.remove(bot.getUUID()); }
++    @Override public void close() {
++        if (writer == null) return;
++        end("logging_off_or_server_stop"); event("meta", "log_end", null, "dropped", dropped());
++        writer.close(); retiring.add(writer); writer = null;
++        watches.clear(); stats.clear(); vehicleHealth.clear(); decoys.clear(); trackedVehicles.clear(); vehicleObservers.clear(); vehicleParts.clear(); destroyed.clear();
++    }
++    public void shutdown() {
++        close();
++        long deadline = System.nanoTime() + 2_000_000_000L;
++        for (var sink : retiring) try { sink.awaitClosed(Math.max(1, (deadline - System.nanoTime()) / 1_000_000L)); } catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
++    }
++}
+--- 4.21/src/main/java/net/nuggetmc/tplus/api/agent/legacyagent/skill/BotSkills.java
++++ 4.22/src/main/java/net/nuggetmc/tplus/api/agent/legacyagent/skill/BotSkills.java
+@@ -35,6 +35,8 @@
+     private final net.nuggetmc.tplus.compat.WarfareSupport warfare;
+     private final WarfareTactics ordnance;
+     private final MissileDefense missiles;
++    private final BattleLog battleLog;
++    public BattleLog battleLog() { return battleLog; }
+ 
+     public BotSkills(BotManager manager, SkillSettings settings) {
+         this.manager = manager;
+@@ -53,6 +55,7 @@
+         this.warfare = new net.nuggetmc.tplus.compat.WarfareSupport(this);
+         this.ordnance = new WarfareTactics(this);
+         this.missiles = new MissileDefense(this);
++        this.battleLog = new BattleLog(this, manager);
+     }
+ 
+     public SkillSettings settings() {
+@@ -80,6 +83,7 @@
+     }
+ 
+     public void forget(Terminator bot) {
++        if (bot instanceof Bot b) battleLog.forget(b);
+         if (bot instanceof Bot b) missiles.forget(b);
+         if (bot instanceof Bot b) ordnance.forget(b);
+         warfare.forget(bot);
+@@ -360,12 +364,12 @@
+         if (target == null && limitedPerception(bot) && mem.lastSeen != null
+                 && (now - mem.lastSeenTick < 100 || now < mem.recoverySearchUntil)) {
+             Vec3 delta = mem.lastSeen.subtract(bot.getLocation()).multiply(1, 0, 1);
+-            bot.faceLocation(mem.lastSeen);
+-            if (delta.lengthSqr() > 2 && bot.isBotOnGround()) searchLastSeen(bot, mem, now);
+-            else if (bot.tickDelay(10)) bot.setLook(bot.getEntity().getYRot() + 30, 0);
+-            return true;
+-        }
+-        if (target == null && limitedPerception(bot) && bot.tickDelay(10)) bot.setLook(bot.getEntity().getYRot() + 30, 0);
++            if (delta.lengthSqr() > 2 && bot.isBotOnGround()) {
++                bot.faceLocation(mem.lastSeen);
++                searchLastSeen(bot, mem, now);
++                return true;
++            }
++        }
+ 
+         return false;
+     }
+--- 4.21/src/main/java/net/nuggetmc/tplus/api/agent/legacyagent/skill/MissileDefense.java
++++ 4.22/src/main/java/net/nuggetmc/tplus/api/agent/legacyagent/skill/MissileDefense.java
+@@ -29,9 +29,10 @@
+     private static final class State {
+         Threat threat;
+         String phase = "IDLE";
++        long nextShelter, buildStarted = -1;
++        String warningType = "LOCK_WARNING";
+         long scanAt, warnedUntil, lastThreat = -1000, firstThreat = -1, started, searchAt, rocketAt, maneuverAt;
+-        Vec3 origin, landing, coverDirection;
+-        Entity coverMissile;
++        Vec3 origin, landing;
+         BlockPos shelter;
+         List<BlockPos> path;
+         int pathIndex, placed;
+@@ -48,7 +49,7 @@
+     MissileDefense(BotSkills skills) { this.skills = skills; }
+     public String describe(Bot bot) {
+         State s = states.get(bot);
+-        return s == null ? "" : "; missileDefense=" + s.phase + "; missileAlert=" + (s.threat == null ? "NONE" : s.threat.alert()) + "; shelterBlocks=" + s.placed;
++        return s == null ? "" : "; missileDefense=" + s.phase + "; missileAlert=" + (s.threat == null ? "NONE" : s.threat.alert()) + "; shelterBlocks=" + s.blocks.size() + "; shelterPlaced=" + s.placed;
+     }
+     public int placed(Bot bot) { State s = states.get(bot); return s == null ? 0 : s.placed; }
+     @Nullable public Threat threat(Bot bot, long now) {
+@@ -60,7 +61,7 @@
+         s.threat = skills.warfare().access().missiles(bot).stream()
+                 .map(m -> new Threat("INBOUND", m, m.entity().position(), Math.max(0, (m.entity().position().distanceTo(body.position()) - m.radius() * 2 - body.getBbWidth()) / Math.max(3, m.entity().getDeltaMovement().length()))))
+                 .min(Comparator.comparingDouble(Threat::impactTicks)).orElse(null);
+-        if (s.threat == null && now < s.warnedUntil) s.threat = new Threat("LOCK_WARNING", null, s.origin == null ? body.position() : s.origin, 1000);
++        if (s.threat == null && now < s.warnedUntil) s.threat = new Threat(s.warningType, null, s.origin == null ? body.position() : s.origin, 1000);
+         if (s.threat == null && now % 4 < 2) {
+             // A scoped launcher is only an aim warning; the client's private lock is never inferred as confirmed.
+             for (LivingEntity shooter : bot.getBotLevel().getEntitiesOfClass(LivingEntity.class, body.getBoundingBox().inflate(256),
+@@ -79,17 +80,22 @@
+         if (s.threat != null) { if (now - s.lastThreat > 4) s.firstThreat = now; s.lastThreat = now; }
+         return s.threat;
+     }
+-    public void warning(ServerLevel level, Vec3 position, long now) {
++    public void warning(ServerLevel level, Vec3 position, long now) { warning(level, position, now, "locked_warning"); }
++    public void warning(ServerLevel level, Vec3 position, long now, String sound) {
+         if (!skills.warfare().available()) return;
+         for (var terminator : skills.bots()) if (terminator instanceof Bot bot && bot.level() == level && bot.isAlive()
+                 && bot.getRootVehicle().getOnPos().distSqr(BlockPos.containing(position)) < 3) {
+-            State s = states.computeIfAbsent(bot, b -> new State()); s.warnedUntil = now + 12; s.scanAt = 0;
++            State s = states.computeIfAbsent(bot, b -> new State()); s.warnedUntil = now + 12; s.scanAt = 0; s.warningType = sound.equals("locking_warning") ? "LOCKING_WARNING" : "LOCKED_WARNING";
++            skills.battleLog().event("missiles", "missile_warning", bot, "warning", sound, "source", BattleLog.pos(position));
+         }
+     }
+     public boolean tick(Bot bot, long now) {
+         if (!skills.warfare().available() || !skills.enabled(bot, "missiledefense") || !bot.isAlive()) { forget(bot); return false; }
+         Threat alert = threat(bot, now); State s = states.get(bot);
+         if (bot.isPassenger()) return false; // The native vehicle pilot consumes the same threat.
++        boolean airborne = bot.isGliding() || !bot.isBotOnGround() && bot.position().y - surface(bot, bot.position()) > 3;
++        boolean inbound = alert != null && alert.missile() != null;
++        if (!airborne && !inbound) { release(bot, s); return false; }
+         if (alert == null && (!s.engaged || now - s.lastThreat > 35)) { release(bot, s); return false; }
+         if (alert != null && !s.engaged) {
+             if (now - s.firstThreat < skills.hardness(bot).reactionTicks()) return false;
+@@ -105,38 +111,60 @@
+         }
+         bot.stopGliding();
+         BotMemory mem = skills.memory(bot); mem.flight = BotMemory.Flight.NONE; mem.maceDrop = false;
+-        if (s.shelter != null && (s.secured || enclosed(bot, s.shelter)) && bot.position().subtract(Vec3.atBottomCenterOf(s.shelter)).horizontalDistance() < 1.4) {
+-            s.secured = true;
+-            boolean intact = enclosed(bot, s.shelter);
+-            s.phase = intact ? "COVERED" : "REPAIR_SHELTER";
+-            if (alert != null && alert.missile() != null) coverMove(bot, s, alert);
+-            if (!intact) build(bot, s, now);
+-            return true;
+-        }
++        if (!constructionThreat(bot, alert)) { s.phase = "TRACK_MISSILE"; return false; }
++        if (now % 10 == 0) skills.battleLog().event("missiles", "missile_seen", bot, "missile", skills.battleLog().identity(alert.missile().entity()),
++                "distance", bot.distanceTo(alert.missile().entity()), "approaching", true);
+         if (s.shelter == null && now >= s.searchAt) {
+-            s.searchAt = now + 40; s.shelter = findShelter(bot);
+-            if (s.shelter != null && bot.position().distanceTo(Vec3.atBottomCenterOf(s.shelter)) > 1) {
+-                s.path = skills.pathfinder().find(bot.getBotLevel(), bot, s.shelter, 12); s.pathIndex = 1;
+-                if (s.path == null) s.shelter = null;
+-            }
+-        }
+-        if (s.shelter != null && now - s.started < 100 && bot.position().subtract(Vec3.atBottomCenterOf(s.shelter)).horizontalDistance() > 0.3) {
++            s.searchAt = now + 40; s.shelter = findNaturalCover(bot, alert);
++            if (s.shelter != null) { s.path = skills.pathfinder().find(bot.getBotLevel(), bot, s.shelter, 12); s.pathIndex = 1; if (s.path == null) s.shelter = null; }
++        }
++        if (s.shelter != null && s.buildStarted < 0) {
+             s.phase = "SEEK_SHELTER"; Vec3 goal = Vec3.atBottomCenterOf(s.shelter);
+             if (s.path != null) {
+                 while (s.pathIndex < s.path.size() && bot.position().distanceTo(Vec3.atBottomCenterOf(s.path.get(s.pathIndex))) < 0.7) s.pathIndex++;
+                 if (s.pathIndex < s.path.size()) goal = Vec3.atBottomCenterOf(s.path.get(s.pathIndex));
+             }
+-            walk(bot, goal); return true;
+-        }
+-        if (s.shelter == null || Math.abs(bot.getY() - s.shelter.getY()) > 0.6 || bot.position().subtract(Vec3.atBottomCenterOf(s.shelter)).horizontalDistance() > 0.5) { s.shelter = feet(bot); s.secured = false; }
+-        Vec3 center = Vec3.atBottomCenterOf(s.shelter);
+-        if (bot.position().subtract(center).horizontalDistance() > 0.12) { s.phase = "ALIGN_SHELTER"; walk(bot, center); return true; }
+-        bot.stand();
+-        s.phase = enclosed(bot, s.shelter) ? "COVERED" : "BUILD_SHELTER";
+-        if (!s.phase.equals("COVERED")) build(bot, s, now);
+-        if (enclosed(bot, s.shelter)) { s.phase = "COVERED"; s.secured = true; }
+-        return true;
+-    }
++            if (bot.position().distanceTo(Vec3.atBottomCenterOf(s.shelter)) > 0.5) walk(bot, goal); else { bot.stand(); s.phase = "NATURAL_COVER"; }
++            return true;
++        }
++        if (s.buildStarted < 0) {
++            if (now < s.nextShelter) { s.phase = "SHELTER_COOLDOWN"; return false; }
++            s.shelter = feet(bot); s.buildStarted = now; s.nextShelter = now + 500; s.placed = 0;
++            skills.battleLog().event("missiles", "shelter_start", bot, "missile", skills.battleLog().identity(alert.missile().entity()), "cooldownTicks", 500, "limit", 4);
++        }
++        // One finite barrier, never repair blocks broken by an attacker.
++        if (!s.secured && now - s.buildStarted <= 10 && s.placed < 4) build(bot, s, now);
++        if (!s.secured && (s.placed >= 4 || now - s.buildStarted > 10)) {
++            s.secured = true; skills.battleLog().event("missiles", "shelter_done", bot, "blocks", s.placed, "durationTicks", now - s.buildStarted);
++        }
++        s.phase = s.secured ? "SMALL_COVER" : "BUILD_SHELTER";
++        return false; // Infantry can still move and fight; a barrier is not an invulnerability state.
++    }
++    private static boolean constructionThreat(Bot bot, @Nullable Threat alert) {
++        if (alert == null || alert.missile() == null) return false;
++        Entity missile = alert.missile().entity(); Vec3 to = bot.getBoundingBox().getCenter().subtract(missile.position());
++        return to.lengthSqr() <= 96 * 96 && missile.getDeltaMovement().dot(to) > 0.05 && clear(bot, bot.getEyePosition(), missile.position());
++    }
++    @Nullable private BlockPos findNaturalCover(Bot bot, Threat alert) {
++        BlockPos here = feet(bot); Vec3 incoming = alert.missile().entity().position();
++        for (int r : new int[]{2, 4, 6, 8}) for (int i = 0; i < 8; i++) {
++            BlockPos p = here.offset(Mth.floor(Math.cos(i * Math.PI / 4) * r), 0, Mth.floor(Math.sin(i * Math.PI / 4) * r));
++            if (!loaded(bot, new AABB(p).inflate(1)) || !solid(bot, p.below()) || !SkillUtil.passable(bot.getBotLevel(), p) || !SkillUtil.passable(bot.getBotLevel(), p.above())) continue;
++            Vec3 body = Vec3.atBottomCenterOf(p);
++            if (!clear(bot, incoming, body.add(0, 0.5, 0)) && !clear(bot, incoming, body.add(0, 1.6, 0)) && !clear(bot, body.add(0, 5, 0), body.add(0, 1.6, 0))) return p;
++        }
++        return null;
++    }
++    private static List<BlockPos> barrier(State s) {
++        Threat alert = s.threat;
++        if (alert != null && (alert.missile().topAttack() || alert.origin().y > s.shelter.getY() + 6))
++            return List.of(s.shelter.above(2), s.shelter.above(2).east(), s.shelter.above(2).south(), s.shelter.above(2).east().south());
++        Vec3 from = alert.origin().subtract(Vec3.atCenterOf(s.shelter));
++        net.minecraft.core.Direction toward = net.minecraft.core.Direction.getNearest(from.x, 0, from.z);
++        BlockPos wall = s.shelter.relative(toward); var side = toward.getClockWise();
++        return List.of(wall, wall.above(), wall.relative(side), wall.relative(side).above());
++    }
++
+     private void fly(Bot bot, State s, @Nullable Threat alert, long now) {
+         if (!bot.isGliding() && skills.enabled(bot, "elytra") && bot.hasUsableElytra()) bot.startGliding();
+         if (!bot.isGliding()) { s.phase = "DESCEND"; return; }
+@@ -196,64 +224,7 @@
+         }
+         return null;
+     }
+-    @Nullable private BlockPos findShelter(Bot bot) {
+-        BlockPos here = feet(bot);
+-        if (enclosed(bot, here)) return here;
+-        if (!loaded(bot, new AABB(here).inflate(14, 2, 14))) return null;
+-        for (int r : new int[]{2, 4, 6, 8}) for (int i = 0; i < 8; i++) {
+-            BlockPos p = here.offset(Mth.floor(Math.cos(i * Math.PI / 4) * r), 0, Mth.floor(Math.sin(i * Math.PI / 4) * r));
+-            if (!solid(bot, p.below()) || !SkillUtil.passable(bot.getBotLevel(), p) || !SkillUtil.passable(bot.getBotLevel(), p.above())) continue;
+-            if (innerShell(p).stream().filter(b -> solid(bot, b)).count() >= 54 && solid(bot, p.above(2))) {
+-                boolean room = true;
+-                for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++)
+-                    room &= SkillUtil.passable(bot.getBotLevel(), p.offset(dx, 0, dz)) && SkillUtil.passable(bot.getBotLevel(), p.offset(dx, 1, dz));
+-                if (room) return p;
+-            }
+-        }
+-        return null;
+-    }
+-    public boolean enclosed(Bot bot, BlockPos feet) {
+-        return loaded(bot, new AABB(feet).inflate(2)) && shell(feet).stream().allMatch(b -> solid(bot, b));
+-    }
+     private static BlockPos feet(Bot bot) { return BlockPos.containing(bot.getX(), bot.getY() + 0.05, bot.getZ()); }
+-    private static List<BlockPos> innerShell(BlockPos feet) {
+-        List<BlockPos> result = new ArrayList<>();
+-        for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) result.add(feet.offset(dx, 2, dz));
+-        for (int dy = 0; dy <= 2; dy++) for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++)
+-            if (Math.abs(dx) == 2 || Math.abs(dz) == 2) result.add(feet.offset(dx, dy, dz));
+-        result.add(feet.below()); return result;
+-    }
+-    private static List<BlockPos> shell(BlockPos feet) {
+-        List<BlockPos> result = innerShell(feet);
+-        // The native projectile can cross thin walls in a single tick. Keep a second roof and room to move inside.
+-        for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) result.add(feet.offset(dx, 3, dz));
+-        return result;
+-    }
+-    private static void coverMove(Bot bot, State s, Threat alert) {
+-        Entity missile = alert.missile().entity();
+-        Vec3 center = Vec3.atBottomCenterOf(s.shelter);
+-        if (s.coverMissile != missile) {
+-            s.coverMissile = missile;
+-            Vec3 heading = missile.getDeltaMovement();
+-            if (heading.horizontalDistanceSqr() < 0.01) heading = bot.position().subtract(missile.position());
+-            s.coverDirection = new Vec3(-heading.z, 0, heading.x).normalize();
+-        }
+-        double distance = missile.position().distanceTo(bot.position());
+-        // Move clear of the incoming line early enough to brake before native lag-compensated contact.
+-        Vec3 step;
+-        if (alert.missile().topAttack()) {
+-            // Top attack can turn almost instantly; continuous lateral motion works better than a terminal reversal.
+-            Vec3 radial = bot.position().subtract(center).multiply(1, 0, 1);
+-            Vec3 tangent = radial.lengthSqr() > 0.04 ? new Vec3(-radial.z, 0, radial.x).normalize() : s.coverDirection;
+-            step = tangent.scale(0.2).subtract(radial.scale(0.3));
+-        } else {
+-            Vec3 goal = center.add(s.coverDirection.scale(distance < 24 ? 1.1 : 0));
+-            Vec3 delta = goal.subtract(bot.position()).multiply(1, 0, 1);
+-            step = delta.length() < 0.15 ? bot.getVelocity().multiply(-1, 0, -1) : delta.normalize().scale(0.2);
+-        }
+-        AABB next = bot.getBoundingBox().move(step.normalize().scale(0.4)).deflate(0.01);
+-        if (loaded(bot, next) && bot.level().noCollision(bot, next)) { bot.stand(); bot.walk(step); }
+-    }
+     private void build(Bot bot, State s, long now) {
+         if (placementTick != now) {
+             placementTick = now; placementBudget = 24;
+@@ -273,16 +244,18 @@
+         }
+         BlockState state = block.defaultBlockState();
+         boolean fromInventory = !resource.isEmpty();
+-        for (BlockPos pos : shell(s.shelter)) {
++        for (BlockPos pos : barrier(s)) {
++            if (s.placed >= 4) break;
+             if (limit == 0 || !loaded(bot, new AABB(pos))) break;
+             if (solid(bot, pos) || !state.isCollisionShapeFullBlock(bot.level(), pos) || !bot.getBotLevel().getBlockState(pos).canBeReplaced()
+                     || !bot.getBotLevel().getFluidState(pos).isEmpty() || bot.position().distanceTo(Vec3.atCenterOf(pos)) > 4.5
+                     || new AABB(pos).intersects(bot.getBoundingBox())
+                     || !bot.getBotLevel().getEntities(bot, new AABB(pos), e -> e.blocksBuilding && !e.isSpectator()).isEmpty()) continue;
+             if (fromInventory && (resource.isEmpty() || !bot.consumeItem(resource.getItem()))) break;
+-            bot.attemptBlockPlace(pos, block, false);
++            bot.attemptBlockPlace(pos, block, false, "missile_shelter");
+             if (bot.getBotLevel().getBlockState(pos).equals(state)) {
+                 s.blocks.put(GlobalPos.of(bot.getBotLevel().dimension(), pos), state); s.placed++; limit--; placementBudget--;
++
+             }
+         }
+     }
+@@ -312,12 +285,23 @@
+         return loaded(bot, new AABB(from, to).inflate(0.5)) && bot.getBotLevel().clip(new ClipContext(from, to, ClipContext.Block.COLLIDER, ClipContext.Fluid.ANY, bot)).getType() == HitResult.Type.MISS;
+     }
+     private void release(Bot bot, State s) {
+-        if (s.engaged) { skills.memory(bot).nextTakeoff = Math.max(skills.memory(bot).nextTakeoff, bot.getServer().getTickCount() + 100); cleanup(s); }
++        if (s.engaged) {
++            skills.memory(bot).nextTakeoff = Math.max(skills.memory(bot).nextTakeoff, bot.getServer().getTickCount() + 100);
++            cleanup(bot, s, "threat_passed");
++        }
+         s.engaged = false; s.secured = false; s.ceilingEscape = false;
+-        s.phase = "IDLE"; s.shelter = null; s.landing = null; s.path = null; s.coverMissile = null; s.coverDirection = null;
+-    }
+-    private void cleanup(State s) {
+-        pending.putAll(s.blocks); s.blocks.clear(); sweep();
++        s.buildStarted = -1; s.phase = "IDLE"; s.shelter = null; s.landing = null; s.path = null;
++    }
++    private void cleanup(Bot bot, State s, String reason) {
++        int removed = 0, deferred = 0, owned = s.blocks.size();
++        for (var entry : s.blocks.entrySet()) {
++            var level = bot.getServer().getLevel(entry.getKey().dimension()); BlockPos pos = entry.getKey().pos();
++            if (level == null || !level.hasChunkAt(pos)) { pending.put(entry.getKey(), entry.getValue()); deferred++; }
++            else if (level.getBlockState(pos).equals(entry.getValue()) && level.removeBlock(pos, false)) removed++;
++        }
++        s.blocks.clear();
++        if (s.buildStarted >= 0) skills.battleLog().event("missiles", "shelter_removed", bot, "blocks", removed, "ownedBlocks", owned, "pending", deferred,
++                "durationTicks", bot.getServer().getTickCount() - s.buildStarted, "reason", reason, "removal", "matching_owned_blocks_only");
+     }
+     public void sweep() {
+         pending.entrySet().removeIf(entry -> {
+@@ -329,6 +313,6 @@
+         });
+     }
+     public void invalidate(GlobalPos pos) { pending.remove(pos); states.values().forEach(s -> s.blocks.remove(pos)); }
+-    public void forget(Bot bot) { State s = states.remove(bot); if (s != null) cleanup(s); }
++    public void forget(Bot bot) { State s = states.remove(bot); if (s != null) cleanup(bot, s, "owner_or_ability_removed"); }
+     public void clear() { for (Bot b : List.copyOf(states.keySet())) forget(b); }
+ }
+--- 4.21/src/main/java/net/nuggetmc/tplus/api/agent/legacyagent/skill/TacticalSkill.java
++++ 4.22/src/main/java/net/nuggetmc/tplus/api/agent/legacyagent/skill/TacticalSkill.java
+@@ -6,11 +6,8 @@
+ import net.minecraft.core.component.DataComponents;
+ import net.minecraft.server.level.ServerPlayer;
+ import net.minecraft.world.entity.LivingEntity;
+-import net.minecraft.world.entity.projectile.ThrownPotion;
+ import net.minecraft.world.item.ItemStack;
+ import net.minecraft.world.item.Items;
+-import net.minecraft.world.item.alchemy.PotionContents;
+-import net.minecraft.world.item.alchemy.Potions;
+ import net.minecraft.world.level.ClipContext;
+ import net.minecraft.world.phys.AABB;
+ import net.minecraft.world.phys.HitResult;
+@@ -21,9 +18,7 @@
+ 
+ import javax.annotation.Nullable;
+ import java.util.ArrayList;
+-import java.util.Collections;
+ import java.util.List;
+-import java.util.Random;
+ import java.util.Map;
+ import java.util.LinkedHashMap;
+ 
+@@ -238,7 +233,7 @@
+                         || !bot.getBotLevel().getFluidState(pos).isEmpty()
+                         || !bot.getBotLevel().getEntities(bot, new AABB(pos)).isEmpty() || new AABB(pos).intersects(bot.getBoundingBox())) continue;
+                 var state = skills.settings().buildBlock.defaultBlockState();
+-                bot.attemptBlockPlace(pos, skills.settings().buildBlock, false);
++                bot.attemptBlockPlace(pos, skills.settings().buildBlock, false, "tactical_cover");
+                 if (bot.getBotLevel().getBlockState(pos).equals(state)) {
+                     mem.cover.put(GlobalPos.of(bot.getBotLevel().dimension(), pos), state);
+                     mem.coverExpires = manager.getServer().getTickCount() + 600;
+@@ -277,32 +272,6 @@
+     private void support(Bot bot, BotMemory mem, @Nullable LivingEntity target, long now) {
+         if (mem.tactic == BotMemory.Tactic.COVER_ALLY) mem.tactic = BotMemory.Tactic.FIGHT;
+         mem.protectedAlly = null;
+-        List<ServerPlayer> close = allies(bot, 4);
+-        if (now >= mem.nextBuff && !close.isEmpty() && !bot.isConsuming()
+-                && bot.getBotLevel().getEntitiesOfClass(LivingEntity.class, bot.getBoundingBox().inflate(5),
+-                e -> e != bot && e.isAlive() && !allied(bot, e)).isEmpty()) {
+-            var effects = new ArrayList<>(List.of(Potions.STRENGTH, Potions.SWIFTNESS, Potions.LEAPING));
+-            Collections.shuffle(effects, new Random(bot.getUUID().getMostSignificantBits()));
+-            for (int i = 0; i < skills.hardness(bot).buffCount(); i++) {
+-                var potion = effects.get(i);
+-                var effect = potion.value().getEffects().getFirst().getEffect();
+-                if (bot.hasEffect(effect) && close.stream().allMatch(p -> p.hasEffect(effect))) continue;
+-                Vec3 center = bot.position();
+-                for (ServerPlayer ally : close) center = center.add(ally.position());
+-                center = center.scale(1.0 / (close.size() + 1));
+-                ThrownPotion thrown = new ThrownPotion(bot.getBotLevel(), bot);
+-                ItemStack stack = new ItemStack(Items.SPLASH_POTION);
+-                stack.set(DataComponents.POTION_CONTENTS, new PotionContents(potion));
+-                thrown.setItem(stack);
+-                Vec3 delta = center.add(0, 0.1, 0).subtract(bot.getEyePosition());
+-                thrown.shoot(delta.x, delta.y, delta.z, 0.5F, 0);
+-                bot.getBotLevel().addFreshEntity(thrown);
+-                skills.chatter().say(bot, "ally.buff", target, Map.of("buffs", potion.is(Potions.STRENGTH) ? "力量" : potion.is(Potions.SWIFTNESS) ? "迅捷" : "跳跃提升"));
+-                bot.punch();
+-                mem.nextBuff = now + 100;
+-                break;
+-            }
+-        }
+         if (target == null || mem.tactic != BotMemory.Tactic.FIGHT || bot.getHealth() < bot.getMaxHealth() * 0.65) return;
+         ServerPlayer assigned = skills.guardedAlly(bot);
+         List<ServerPlayer> wounded = assigned != null ? List.of(assigned) : allies(bot, 8);
+--- 4.21/src/main/java/net/nuggetmc/tplus/api/agent/legacyagent/skill/TeamBoard.java
++++ 4.22/src/main/java/net/nuggetmc/tplus/api/agent/legacyagent/skill/TeamBoard.java
+@@ -211,8 +211,10 @@
+                 .min(Comparator.comparingDouble(p -> p.distanceTo(bot))).orElse(null);
+         if (ally == null) return false;
+         mem.teamRole = BotMemory.TeamRole.GUARD; mem.guardedAlly = ally.getId();
+-        bot.stand(); bot.faceLocation(ally.position()); bot.setItem(bot.getWeapon());
+-        return bot.distanceTo(ally) <= 5 || step(bot, ally.position());
++        bot.stand(); bot.setItem(bot.getWeapon());
++        if (bot.distanceTo(ally) <= 5) return true;
++        bot.faceLocation(ally.position());
++        return step(bot, ally.position());
+     }
+     boolean position(Bot bot, BotMemory mem, LivingEntity target, long now) {
+         if (!cooperative(bot) || skills.hardness(bot).level() != 10 || mem.roleTarget != target.getId()
+--- 4.21/src/main/java/net/nuggetmc/tplus/api/agent/legacyagent/skill/WarfareTactics.java
++++ 4.22/src/main/java/net/nuggetmc/tplus/api/agent/legacyagent/skill/WarfareTactics.java
+@@ -35,7 +35,9 @@
+         Vec3 passDirection = Vec3.ZERO;
+         AABB targetBounds;
+         double closest;
+-        long progressAt, placedAt;
++        long progressAt, placedAt, nearSince = -1, firstAttack = -1, exitStarted;
++        double turnDegrees; float lastYaw; boolean exiting, pendingFire; int fireAmmo;
++        String fireKind; double fireDistance;
+         String c4Result = "";
+         long started, seen, nextAttempt, nextFire;
+         int lastVertical, verticalTicks, drops, detonations;
+@@ -58,8 +60,18 @@
+     public void clear() { for (Bot bot : List.copyOf(states.keySet())) forget(bot); }
+     public void cancel(Bot bot) {
+         State s = states.get(bot);
+-        if (s == null || s.mode == Mode.IDLE) return;
+-        if (s.drone != null && s.hand != null) s.drone.stop(bot, s.hand.stack);
++        if (s == null) return;
++        if (s.mode == Mode.IDLE) { s.exiting = false; return; }
++        if (s.mode == Mode.C4_APPROACH || s.mode == Mode.C4_EGRESS) {
++            long now = bot.getServer().getTickCount();
++            String reason = s.c4Result.equals("APPROACH") || s.c4Result.equals("PLACED") ? "CANCELLED" : s.c4Result;
++            skills.battleLog().event("c4", "c4_end", bot, "reason", reason, "aborted", !reason.equals("DETONATED"), "durationTicks", now - s.started,
++                    "orbitTicks", s.nearSince < 0 ? 0 : (s.placedAt > 0 ? s.placedAt : now) - s.nearSince, "orbits", s.turnDegrees / 360);
++        }
++        if (s.drone != null && s.hand != null) {
++            skills.battleLog().event("drones", "drone_lost", bot, "drone", skills.battleLog().identity(s.drone.entity()), "reason", s.returning ? "mission_returned" : !bot.isAlive() ? "operator_dead_entity_retained" : "control_released", "durationTicks", bot.getServer().getTickCount() - s.started);
++            s.drone.stop(bot, s.hand.stack);
++        }
+         if (s.hand != null) s.hand.close();
+         BotMemory mem = skills.memory(bot);
+         if (mem.plan == BotMemory.FlightPlan.C4) {
+@@ -73,7 +85,7 @@
+             if (s.c4Result.equals("APPROACH") || s.c4Result.equals("PLACED")) s.c4Result = "CANCELLED";
+         }
+         s.hand = null; s.drone = null; s.target = null; s.charge = null;
+-        s.mode = Mode.IDLE;
++        s.mode = Mode.IDLE; s.exiting = false;
+         s.nextAttempt = Math.max(s.nextAttempt, bot.getServer().getTickCount() + 300);
+     }
+     public boolean tick(Bot bot, @Nullable LivingEntity enemy, long now) {
+@@ -97,6 +109,19 @@
+         var access = skills.warfare().access();
+         if (access == null) { cancel(bot); return false; }
+         State s = states.get(bot);
++        if (s != null && s.exiting) {
++            if (!skills.enabled(bot, "c4") || bot.isPassenger() || !bot.isAlive() || bot.isConsuming()) { s.exiting = false; return false; }
++            BotMemory mem = skills.memory(bot);
++            double floor = SkillUtil.surfaceY(bot.getBotLevel(), bot.position());
++            if (!bot.isGliding() || bot.getY() - floor < 2 || now - s.exitStarted >= 60) {
++                s.exiting = false; mem.flight = BotMemory.Flight.NONE; mem.maceDrop = false; bot.stopGliding();
++                skills.battleLog().event("c4", "c4_exit", bot, "durationTicks", now - s.exitStarted, "reason", "bounded_descent_finished");
++                return false;
++            }
++            // Keep the same pass heading and descend with native controls. Never re-target the flight centre.
++            bot.setLook(Mth.approachDegrees(bot.getYRot(), SkillUtil.yawTo(Vec3.ZERO, s.passDirection), 12), Mth.approach(bot.getXRot(), 65, 12));
++            return true;
++        }
+         if (s != null && s.mode != Mode.IDLE) {
+             boolean enabled = skills.enabled(bot, s.mode == Mode.DRONE ? "drones" : "c4");
+             BotMemory mem = skills.memory(bot);
+@@ -125,7 +150,8 @@
+                 s.passDirection = s.observed.subtract(bot.position()).multiply(1, 0, 1).normalize();
+                 s.targetBounds = enemy.getRootVehicle().getBoundingBox();
+                 s.closest = SkillUtil.horizontalDistance(bot.position(), s.observed); s.progressAt = now; s.placedAt = 0;
+-                s.c4Result = "APPROACH";
++                s.c4Result = "APPROACH"; s.nearSince = -1; s.turnDegrees = 0; s.lastYaw = bot.getYRot();
++                skills.battleLog().event("c4", "c4_approach", bot, "target", skills.battleLog().identity(enemy.getRootVehicle()), "mode", "single_air_pass", "orbitLimitTicks", 80);
+                 mem.flightGoal = s.observed.add(s.passDirection.scale(40)); skills.warfare().release(bot); return true;
+             }
+         }
+@@ -137,7 +163,7 @@
+     }
+     private static void start(State s, Entity target, Vec3 home, long now) {
+         s.target = target.getUUID(); s.observed = target.getBoundingBox().getCenter(); s.velocity = target.getDeltaMovement();
+-        s.home = home; s.returning = false; s.started = s.seen = now; s.nextFire = now; s.verticalTicks = s.lastVertical = 0;
++        s.home = home; s.returning = false; s.firstAttack = -1; s.pendingFire = false; s.started = s.seen = now; s.nextFire = now; s.verticalTicks = s.lastVertical = 0;
+     }
+     private boolean startDrone(Bot bot, LivingEntity enemy, State s, WarfareAccess.Ordnance ordnance, long now) {
+         skills.warfare().release(bot);
+@@ -205,6 +231,8 @@
+         } else if (!remote.link(bot)) { hand.close(); return false; }
+         start(s, enemy.getRootVehicle(), bot.position(), now);
+         s.drone = remote; s.hand = hand; s.mode = Mode.DRONE;
++        skills.battleLog().event("drones", "drone_launch", bot, "drone", skills.battleLog().identity(remote.entity()), "target", skills.battleLog().identity(enemy.getRootVehicle()), "ammo", remote.ammo(), "firstAttackLimitTicks", 100);
++        skills.battleLog().event("drones", "drone_target", bot, "drone", skills.battleLog().identity(remote.entity()), "target", skills.battleLog().identity(enemy.getRootVehicle()));
+         return true;
+     }
+     private ItemStack selectPayload(Bot bot, LivingEntity enemy, WarfareAccess.Ordnance ordnance) {
+@@ -225,6 +253,13 @@
+     }
+     private boolean tickDrone(Bot bot, State s, WarfareAccess.Ordnance ordnance, long now) {
+         Entity drone = s.drone.entity();
++        if (s.pendingFire && (s.drone.ammo() < s.fireAmmo || s.fireKind.equals("self_blast") && drone.isRemoved())) {
++            s.pendingFire = false; s.drops++;
++            if (s.firstAttack < 0) s.firstAttack = now;
++            skills.battleLog().event("drones", "drone_attack", bot, "drone", skills.battleLog().identity(drone), "kind", s.fireKind,
++                    "horizontalDistance", s.fireDistance, "firstAttackLatencyTicks", s.firstAttack - s.started, "durationTicks", now - s.started, "round", s.drops, "confirmedBy", s.fireKind.equals("drop") ? "native_ammo_consumed" : "native_fire_and_entity_removed");
++        }
++
+         if (drone.isRemoved() || drone.level() != bot.level() || !s.drone.owned(bot) || !s.hand.active()
+                 || drone.distanceTo(bot) > 128 || !MovementBounds.contains(bot, drone.position(), 4)) { cancel(bot); return false; }
+         Entity target = bot.getBotLevel().getEntity(s.target);
+@@ -233,8 +268,10 @@
+                 && line(bot, drone.getEyePosition(), target.getBoundingBox().getCenter());
+         if (observed) { s.observed = target.getBoundingBox().getCenter(); s.velocity = target.getDeltaMovement(); s.seen = now; }
+         var payload = s.drone.payload();
+-        if (payload == null || s.drone.ammo() == 0 || !observed && now - s.seen > 60) s.returning = true;
++        boolean wasReturning = s.returning;
++        if (payload == null || s.drone.ammo() == 0 || !observed && now - s.seen > 60 || s.firstAttack < 0 && now - s.started >= 100) s.returning = true;
+         if (payload != null && payload.kamikaze() && !safeBlast(bot, s.observed, payload.radius(), target, false)) s.returning = true;
++        if (s.returning && !wasReturning) skills.battleLog().event("drones", "drone_return", bot, "drone", skills.battleLog().identity(drone), "durationTicks", now - s.started, "reason", s.firstAttack < 0 ? "first_attack_deadline_or_unsafe" : "ammo_or_target_lost");
+         if (s.returning) {
+             if (drone.position().distanceTo(bot.getEyePosition()) < bot.entityInteractionRange()) { cancel(bot); return false; }
+             Vec3 home = MovementBounds.clamp(bot, s.home.add(0, 1.5, 0), 4);
+@@ -259,10 +296,12 @@
+             Vec3 impact = forecast.position();
+             Vec3 predictedTarget = s.observed.add(s.velocity.scale(Math.min(25, forecast.ticks())));
+             double error = SkillUtil.horizontalDistance(impact, predictedTarget);
+-            boolean ready = payload.kamikaze() ? drone.position().distanceTo(s.observed) < 6.5 : error < 3.2 && drone.getY() > s.observed.y + 3;
++            boolean ready = payload.kamikaze() ? drone.position().distanceTo(s.observed) < 6.5 : error < Math.max(6.5, payload.radius() + 1) && drone.getY() > s.observed.y + 3;
+             if (ready && safeBlast(bot, impact, payload.radius(), target, false)
+                     && safeBlast(bot, s.observed, payload.radius(), target, false)) {
+-                s.drone.fire(bot); s.drops++; s.nextFire = now + (skills.hardness(bot).level() == 10 ? 20 : skills.hardness(bot).level() == 9 ? 30 : 40);
++                s.fireAmmo = s.drone.ammo(); s.pendingFire = true; s.fireKind = payload.kamikaze() ? "self_blast" : "drop";
++                s.fireDistance = horizontal; s.drone.fire(bot);
++                s.nextFire = now + (skills.hardness(bot).level() == 10 ? 16 : skills.hardness(bot).level() == 9 ? 20 : 30);
+             }
+         }
+         pilotDrone(bot, s, goal);
+@@ -270,6 +309,7 @@
+     }
+     private void pilotDrone(Bot bot, State s, Vec3 goal) {
+         Entity entity = s.drone.entity(); Vec3 velocity = entity.getDeltaMovement();
++        if (bot.getServer().getTickCount() % 20 == 0) skills.battleLog().event("drones", "drone_sample", bot, "drone", skills.battleLog().identity(entity), "height", entity.getY(), "vy", entity.getDeltaMovement().y, "mode", s.returning ? "return" : "attack");
+         Vec3 delta = goal.subtract(entity.position());
+         float yaw = SkillUtil.yawTo(entity.position(), goal);
+         double yawError = Mth.wrapDegrees(yaw - entity.getYRot());
+@@ -281,9 +321,11 @@
+             if (forwardSpeed < desired - 0.07) keys |= 4;
+             else if (forwardSpeed > desired + 0.07) keys |= 8;
+         }
+-        int vertical = delta.y - velocity.y * 5 > 0.5 ? 16 : delta.y - velocity.y * 5 < -0.5 ? 32 : 0;
+-        if (vertical != s.lastVertical) s.verticalTicks = 0;
+-        if (vertical != 0 && ++s.verticalTicks >= 6) { vertical = 0; s.verticalTicks = 0; }
++        double heightError = delta.y - velocity.y * 6;
++        int vertical = heightError > 0.5 ? 16 : heightError < -0.5 ? 32 : 0;
++        // SBW holdTickY survives an up/down reversal. A neutral tick resets it, preventing accelerating oscillation.
++        if (vertical != 0 && s.lastVertical != 0 && (vertical != s.lastVertical || s.verticalTicks >= 2)) vertical = 0;
++        s.verticalTicks = vertical == 0 ? 0 : vertical == s.lastVertical ? s.verticalTicks + 1 : 1;
+         s.lastVertical = vertical;
+         keys |= vertical;
+         s.drone.input(bot, keys, Mth.clamp(yawError * 0.65, -20, 20), Mth.clamp(-entity.getXRot(), -8, 8));
+@@ -308,16 +350,21 @@
+         Vec3 predicted = s.observed.add(s.velocity.scale(Math.min(25, now - s.seen)));
+         if (s.mode == Mode.C4_APPROACH) {
+             if (!has(bot, "c4_bomb") || !has(bot, "detonator") || !skills.pilot().canFly(bot) || target == null || !target.isAlive()
+-                    || bot.isAlliedTo(target) || target.getPassengers().stream().anyMatch(bot::isAlliedTo)) { cancel(bot); return false; }
+-            if (now - s.seen > 80) { cancel(bot); return false; }
++                    || bot.isAlliedTo(target) || target.getPassengers().stream().anyMatch(bot::isAlliedTo)) { return finishC4(bot, s, "EQUIPMENT_TARGET_OR_FLIGHT_LOST"); }
++            if (now - s.seen > 80) { return finishC4(bot, s, "EQUIPMENT_TARGET_OR_FLIGHT_LOST"); }
+             double distance = SkillUtil.horizontalDistance(bot.position(), predicted);
++            if (distance < 24 && s.nearSince < 0) {
++                s.nearSince = now; skills.battleLog().event("c4", "c4_orbit_start", bot, "approachTicks", now - s.started);
++            }
++            s.turnDegrees += Math.abs(Mth.wrapDegrees(bot.getYRot() - s.lastYaw)); s.lastYaw = bot.getYRot();
++            if (s.nearSince >= 0 && now - s.nearSince >= 80) return finishC4(bot, s, "ORBIT_LIMIT");
+             if (distance < s.closest - 0.5) { s.closest = distance; s.progressAt = now; }
+             // A missed opportunity is one failed pass, never an orbit around the same centre.
+             if (bot.position().subtract(predicted).dot(s.passDirection) > 8) return finishC4(bot, s, "MISSED_PASS");
+-            if (now - s.started > 120 || now - s.progressAt > 40) return finishC4(bot, s, "NO_PROGRESS");
++            if (now - s.started >= 100 || now - s.progressAt > 40) return finishC4(bot, s, "NO_PROGRESS");
+             mem.flightGoal = predicted.add(s.velocity.scale(8)).add(s.passDirection.scale(40));
+             skills.pilot().tick(bot, mem, enemy, now);
+-            if (mem.flight == BotMemory.Flight.NONE) { cancel(bot); return false; }
++            if (mem.flight == BotMemory.Flight.NONE) { return finishC4(bot, s, "EQUIPMENT_TARGET_OR_FLIGHT_LOST"); }
+             double height = bot.getEyeY() - predicted.y;
+             if (bot.isGliding() && height >= 2 && height <= 14 && distance < 12 && now - s.seen <= 30) {
+                 if (!safeBlast(bot, predicted, ordnance.chargeRadius(), target, true)) return finishC4(bot, s, "UNSAFE_PASS");
+@@ -329,7 +376,7 @@
+                 float flightYaw = bot.getYRot(), flightPitch = bot.getXRot();
+                 Set<UUID> before = new HashSet<>(); ordnance.charges(bot).forEach(c -> before.add(c.getUUID()));
+                 try (Hand hand = Hand.take(bot, stack)) {
+-                    if (hand == null) { cancel(bot); return false; }
++                    if (hand == null) { return finishC4(bot, s, "EQUIPMENT_TARGET_OR_FLIGHT_LOST"); }
+                     bot.setLook(aim.yaw(), aim.pitch());
+                     CustomData.update(DataComponents.CUSTOM_DATA, stack, tag -> tag.putBoolean("Control", true));
+                     stack.getItem().use(bot.level(), bot, InteractionHand.MAIN_HAND);
+@@ -339,6 +386,7 @@
+                 }
+                 Entity charge = ordnance.charges(bot).stream().filter(c -> !before.contains(c.getUUID())).findFirst().orElse(null);
+                 if (charge != null) {
++                    skills.battleLog().event("c4", "c4_throw", bot, "charge", skills.battleLog().identity(charge), "durationTicks", now - s.started, "approachTicks", s.nearSince < 0 ? now - s.started : s.nearSince - s.started, "orbitTicks", s.nearSince < 0 ? 0 : now - s.nearSince, "orbits", s.turnDegrees / 360);
+                     s.charge = charge.getUUID(); s.mode = Mode.C4_EGRESS; s.placedAt = now; s.c4Result = "PLACED";
+                     Vec3 travel = bot.getVelocity().multiply(1, 0, 1).normalize();
+                     if (travel.lengthSqr() > 0.1) s.passDirection = travel;
+@@ -346,7 +394,7 @@
+             }
+         } else {
+             Entity charge = s.charge == null ? null : bot.getBotLevel().getEntity(s.charge);
+-            if (charge == null || !has(bot, "detonator")) { cancel(bot); return false; }
++            if (charge == null || !has(bot, "detonator")) { return finishC4(bot, s, "EQUIPMENT_TARGET_OR_FLIGHT_LOST"); }
+             if (now - s.placedAt > 100) return finishC4(bot, s, "EGRESS_TIMEOUT");
+             // Keep the exit ahead while checking all charges. A blocked detonation never makes us circle.
+             Vec3 exit = bot.position().add(s.passDirection.scale(ordnance.chargeRadius() * 2 + 30));
+@@ -360,18 +408,22 @@
+                 ItemStack detonator = item(bot, "detonator");
+                 if (!bot.getCooldowns().isOnCooldown(detonator.getItem())) {
+                     try (Hand hand = Hand.take(bot, detonator)) {
+-                        if (hand == null) { cancel(bot); return false; }
++                        if (hand == null) { return finishC4(bot, s, "EQUIPMENT_TARGET_OR_FLIGHT_LOST"); }
+                         detonator.getItem().use(bot.level(), bot, InteractionHand.MAIN_HAND); s.detonations++;
++                        skills.battleLog().event("c4", "c4_detonate", bot, "durationTicks", now - s.placedAt, "totalTicks", now - s.started, "ownedCharges", all.size());
+                     }
+                     finishC4(bot, s, "DETONATED"); return true;
+                 }
+             }
+-            if (!bot.isGliding() && mem.flight == BotMemory.Flight.NONE) { cancel(bot); return false; }
++            if (!bot.isGliding() && mem.flight == BotMemory.Flight.NONE) { return finishC4(bot, s, "EQUIPMENT_TARGET_OR_FLIGHT_LOST"); }
+         }
+         return true;
+     }
+     private boolean finishC4(Bot bot, State s, String reason) {
+-        s.c4Result = reason; cancel(bot); return false;
++        long now = bot.getServer().getTickCount();
++        s.c4Result = reason; cancel(bot);
++        s.exiting = bot.isGliding(); s.exitStarted = now;
++        return s.exiting;
+     }
+     private record C4Throw(float yaw, float pitch, Vec3 impact) {}
+     @Nullable private static C4Throw c4Throw(Bot bot, State s, long now, double radius) {
+--- 4.21/src/main/java/net/nuggetmc/tplus/command/commands/BotCommand.java
++++ 4.22/src/main/java/net/nuggetmc/tplus/command/commands/BotCommand.java
+@@ -165,6 +165,27 @@
+         if (args.length == 5 && args[1].equals("board")) return List.of("auto", "0", "1", "2", "3");
+         return List.of();
+     }
++
++    @Command(name = "log", desc = "Enable, inspect or mark the development battle log.", autofill = "logAutofill")
++    public void log(CommandSourceStack sender, List<String> args) {
++        var log = agent().getSkills().battleLog();
++        if (args.isEmpty()) { send(sender, "用法：/bot log on|off|status|mark <文字>"); return; }
++        switch (args.getFirst().toLowerCase(Locale.ROOT)) {
++            case "on", "off" -> {
++                if (args.size() != 1) { send(sender, "用法：/bot log on|off"); return; }
++                log.toggle(args.getFirst().equalsIgnoreCase("on")); manager().saveSettings(); send(sender, log.status());
++            }
++            case "status" -> send(sender, log.status());
++            case "mark" -> {
++                if (!log.enabled()) { send(sender, "请先开启战局日志。"); return; }
++                if (args.size() < 2) { send(sender, "用法：/bot log mark <文字>"); return; }
++                log.mark(String.join(" ", args.subList(1, args.size()))); send(sender, "已记录人工标记。");
++            }
++            default -> send(sender, "用法：/bot log on|off|status|mark <文字>");
++        }
++    }
++    @Autofill
++    public List<String> logAutofill(CommandSourceStack sender, String[] args) { return args.length == 2 ? List.of("on", "off", "status", "mark") : List.of(); }
+ 
+     @Command(name = "chatter", desc = "Reload the targeted level ten chatter files.")
+     public void chatter(CommandSourceStack sender, List<String> args) {
+--- 4.21/src/main/java/net/nuggetmc/tplus/compat/superbwarfare/NativeBattleEvents.java
++++ 4.22/src/main/java/net/nuggetmc/tplus/compat/superbwarfare/NativeBattleEvents.java
+@@ -0,0 +1,43 @@
++package net.nuggetmc.tplus.compat.superbwarfare;
++
++import net.minecraft.world.entity.Entity;
++import net.minecraft.world.item.ItemStack;
++import net.neoforged.bus.api.Event;
++import net.neoforged.bus.api.EventPriority;
++import net.neoforged.neoforge.common.NeoForge;
++import net.nuggetmc.tplus.TerminatorPlus;
++import net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent;
++import net.nuggetmc.tplus.bot.Bot;
++import net.nuggetmc.tplus.api.agent.legacyagent.skill.BattleLog;
++
++/** Register once, resolve the current server at dispatch, and observe native post-shot events. */
++public final class NativeBattleEvents {
++    private static boolean registered;
++    private NativeBattleEvents() {}
++    @SuppressWarnings({"unchecked", "rawtypes"})
++    public static void register() throws ReflectiveOperationException {
++        if (registered) return;
++        Class<? extends Event> shot = (Class<? extends Event>) Class.forName("com.atsuishio.superbwarfare.api.event.ShootEvent$Post");
++        var shooter = shot.getMethod("getShooter"); var data = shot.getMethod("getData");
++        var stack = Class.forName("com.atsuishio.superbwarfare.data.gun.GunData").getField("stack");
++        NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, false, (Class) shot, (java.util.function.Consumer<Event>) event -> {
++            var manager = TerminatorPlus.getManager(); if (manager == null) return;
++            var skills = ((LegacyAgent) manager.getAgent()).getSkills(); if (!skills.battleLog().enabled()) return;
++            try {
++                if (shooter.invoke(event) instanceof Bot bot) {
++                    ItemStack weapon = (ItemStack) stack.get(data.invoke(event));
++                    skills.battleLog().fire(bot, BattleLog.itemId(weapon), skills.currentTarget(bot), bot.isPassenger() ? "mounted" : "handheld");
++                }
++            } catch (ReflectiveOperationException e) { com.mojang.logging.LogUtils.getLogger().error("Cannot record native shot", e); }
++        });
++        Class<? extends Event> hit = (Class<? extends Event>) Class.forName("com.atsuishio.superbwarfare.api.event.ProjectileHitEvent$HitEntity");
++        var owner = hit.getMethod("getOwner"); var target = hit.getMethod("getTarget"); var head = hit.getMethod("isHeadshot"); var projectile = hit.getMethod("getProjectile");
++        NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, false, (Class) hit, (java.util.function.Consumer<Event>) event -> {
++            var manager = TerminatorPlus.getManager(); if (manager == null) return;
++            var log = ((LegacyAgent) manager.getAgent()).getSkills().battleLog(); if (!log.enabled()) return;
++            try { if (owner.invoke(event) instanceof Bot bot) log.event("weapons", "projectile_hit", bot, "target", log.identity((Entity) target.invoke(event)), "projectile", log.identity((Entity) projectile.invoke(event)), "headshot", head.invoke(event)); }
++            catch (ReflectiveOperationException e) { com.mojang.logging.LogUtils.getLogger().error("Cannot record native projectile hit", e); }
++        });
++        registered = true;
++    }
++}
+--- 4.21/src/main/java/net/nuggetmc/tplus/compat/superbwarfare/SuperbWarfareAccess.java
++++ 4.22/src/main/java/net/nuggetmc/tplus/compat/superbwarfare/SuperbWarfareAccess.java
+@@ -98,6 +98,7 @@
+         bind("setWeaponIndex", int.class, int.class); bind("getShootPos", Entity.class, float.class);
+         bind("getShootVec", Entity.class, float.class); bind("vehicleShoot", LivingEntity.class, UUID.class, Vec3.class);
+         bind("setEnergy", int.class);
++        for (String name : List.of("getTurretHealth", "getLeftWheelHealth", "getRightWheelHealth", "getMainEngineHealth", "getSubEngineHealth")) bind(name);
+         bind("getCollisionOBBInfo");
+         Class<?> obbInfo = Class.forName(ROOT + "data.vehicle.subdata.OBBInfo");
+         footprintSize = obbInfo.getMethod("getSize"); footprintCenter = obbInfo.getMethod("getPosition");
+@@ -269,6 +270,11 @@
+         @Override public boolean wreck() { return (boolean) v("isWreck"); }
+         @Override public float health() { return ((Number) v("getHealth")).floatValue(); }
+         @Override public float maxHealth() { return ((Number) v("getMaxHealth")).floatValue(); }
++        @Override public Map<String, Float> partHealth() {
++            Map<String, Float> out = new java.util.LinkedHashMap<>();
++            for (String part : List.of("Turret", "LeftWheel", "RightWheel", "MainEngine", "SubEngine")) out.put(part, ((Number) v("get" + part + "Health")).floatValue());
++            return out;
++        }
+         @Override public int energy() { return (int) v("getEnergy"); }
+         @Override public int maxEnergy() { return (int) v("getMaxEnergy"); }
+         @Override public void energy(int value) { v("setEnergy", value); }

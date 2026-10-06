@@ -1,0 +1,21 @@
+{
+  "version": "4.20.0-BETA",
+  "jar": "C:\\Users\\13703\\Documents\\Codex\\2026-10-04\\http-200-https-github-com-sulfurchi\\outputs\\TerminatorPlus-NeoForge-1.21.1-4.20.0-BETA.jar",
+  "bytes": 784816,
+  "sha256": "D76634BAF1CD1983CEAF18EFC526AF73EACCBB214FAEBA6C9E88FB9300EF1032",
+  "targeted_native_pass": 27,
+  "targeted_native_fail": 0,
+  "full_native_106_not_run": true,
+  "base_130_not_run": true,
+  "frozen_files": 114,
+  "classes": 181,
+  "native_minimum_jar_class_bytes_match": true,
+  "minimum_neoforge": "21.1.1",
+  "jar_crc_verified": true,
+  "sealed_4_19_and_4_18_preserved": true,
+  "known_prior_issues": [
+    "fixed three-block pit second crew boarding timeout",
+    "formal YX100 NO_ROUTE not reproduced",
+    "historical infantry border and TeamDive failures"
+  ]
+}

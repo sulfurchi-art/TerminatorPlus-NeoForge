@@ -1,0 +1,14 @@
+{
+  "changedJava": [
+    "src/main/java/net/nuggetmc/tplus/compat/VehicleCrew.java",
+    "src/main/java/net/nuggetmc/tplus/compat/VehicleNavigation.java",
+    "src/main/java/net/nuggetmc/tplus/compat/VehiclePilot.java",
+    "src/main/java/net/nuggetmc/tplus/utils/SelfTest.java"
+  ],
+  "addedJava": [],
+  "frozenFiles": 114,
+  "nativeClasses": 180,
+  "snapshotTestLog": "ai-hardness-4.19-boarding-pit-2.log",
+  "snapshotTestResult": "3 PASS / 1 FAIL / 4",
+  "fullRegressionPending": true
+}

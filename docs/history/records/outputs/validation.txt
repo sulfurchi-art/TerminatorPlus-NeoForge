@@ -1,0 +1,8 @@
+TerminatorPlus-NeoForge 4.6.0-BETA
+Minecraft: 1.21.1
+Compiled and tested against NeoForge: 21.1.1
+Java: Microsoft OpenJDK 21.0.7
+Build: SUCCESSFUL
+SelfTest: ALL 69 CHECKS PASSED
+SHA256: 64C59426949D2C0F87CFC9AE12263644680768DF5D66B09920145D9439EDE438
+Source base: c1fcf77; local changes have not been pushed.

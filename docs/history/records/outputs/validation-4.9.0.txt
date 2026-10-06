@@ -1,0 +1,25 @@
+TerminatorPlus-NeoForge 4.9.0-BETA
+Validated: 2026-10-04
+Minecraft: 1.21.1
+Compiled and tested against NeoForge: 21.1.1 (minimum retained)
+Java: Microsoft OpenJDK 21.0.7
+Build: SUCCESSFUL
+SelfTest: ALL 111 CHECKS PASSED (44 original + 25 hardness + 20 elite/configuration + 11 strategy + 11 cooperation)
+SelfTest failure markers: none; 111 individual PASS records confirmed.
+Jar: TerminatorPlus-NeoForge-1.21.1-4.9.0-BETA.jar
+Jar bytes: 478233
+SHA256: 1FC22513952614F1C3CF72AD9C3A8ADA2658BCB2DA25CD65FB08B872F524F089
+Jar inspection: archive integrity, 4.9.0 metadata, NeoForge minimum, explicit AT, chatter resources, team role/signal classes and exact built class bytes confirmed.
+Source base: c1fcf77; local changes have not been committed or pushed.
+Full functional log: ai-hardness-4.9.0-selftest.log
+Build log: ai-hardness-4.9.0-build.log
+Progress: TerminatorPlus-NeoForge/AI_HARDNESS_PROGRESS.md
+Guide: TerminatorPlus-NeoForge/AI_HARDNESS.md
+
+This batch: actual human teammate attack focus, recent-injury guard assignment, idle following at hardness 8-10, stable bait/flank/archer roles at 10, wounded-front withdrawal and healthy replacement, and actual friendly-lane checks at draw start and native arrow release.
+The 11 new scenarios cover native melee attack focus; perception, identity, membership, toggles and observation expiry; real guard damage against a pursuer; native follow movement at 8/9/10 within existing limits; all three roles and two real arrow UUIDs; actual movement to safety under an elevated threat with native regeneration and front replacement; canceled attack events; two distinct guards and departure cleanup; and withholding an active draw for an entering teammate before later native arrow damage.
+Roles apply during FIGHT and preserve COVER_ALLY interception as well as retreat/recovery priority. Candidate firing positions cache for 10 ticks; role plans hold up to 80 ticks and invalidate when members or equipment change.
+Functional scenarios use real ServerPlayer fixtures, native items and damage/projectile events. They do not establish adjacent-level win-rate ordering, zero friendly fire under every dynamic shot, complete complex-terrain guard routing, precise simultaneous team dive impacts, or top-player equivalence.
+Remaining requirements are recorded in AI_HARDNESS_PROGRESS.md. The persistent development goal remains active.
+The asynchronous AI performance experiment remains paused at the user's request; its scratch prototype is excluded from this jar.
+Testing used an isolated self-test server. The user's live game server was not modified or started/stopped.

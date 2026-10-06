@@ -1,0 +1,17 @@
+{
+  "frozen_files": 114,
+  "modified_java": [
+    "src/main/java/net/nuggetmc/tplus/TerminatorPlus.java",
+    "src/main/java/net/nuggetmc/tplus/api/agent/legacyagent/skill/BotSkills.java",
+    "src/main/java/net/nuggetmc/tplus/api/agent/legacyagent/skill/SkillSettings.java",
+    "src/main/java/net/nuggetmc/tplus/bot/DefaultEquipment.java",
+    "src/main/java/net/nuggetmc/tplus/compat/VehiclePilot.java",
+    "src/main/java/net/nuggetmc/tplus/compat/WarfareAccess.java",
+    "src/main/java/net/nuggetmc/tplus/compat/WarfareSupport.java",
+    "src/main/java/net/nuggetmc/tplus/compat/superbwarfare/SuperbWarfareAccess.java",
+    "src/main/java/net/nuggetmc/tplus/utils/SelfTest.java"
+  ],
+  "added_java": [
+    "src/main/java/net/nuggetmc/tplus/api/agent/legacyagent/skill/MissileDefense.java"
+  ]
+}

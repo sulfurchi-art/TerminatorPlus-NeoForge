@@ -41,3 +41,14 @@ repo/
 
 run-selftest/*
 !run-selftest/server.properties
+
+# Local Python caches and dependency/runtime artifacts
+__pycache__/
+*.py[cod]
+*.class
+*.log
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/**/gradle/wrapper/gradle-wrapper.jar
+.env
+.env.*

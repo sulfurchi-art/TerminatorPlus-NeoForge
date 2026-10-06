@@ -1,0 +1,25 @@
+TerminatorPlus-NeoForge 4.8.0-BETA
+Validated: 2026-10-04
+Minecraft: 1.21.1
+Compiled and tested against NeoForge: 21.1.1 (minimum retained)
+Java: Microsoft OpenJDK 21.0.7
+Build: SUCCESSFUL
+SelfTest: ALL 100 CHECKS PASSED (44 original + 25 hardness + 20 prior elite/configuration + 11 new strategy)
+SelfTest failure markers: none
+Jar: TerminatorPlus-NeoForge-1.21.1-4.8.0-BETA.jar
+Jar bytes: 450425
+SHA256: 9F39A74565E01F83CA43094D8F4C736D39FDC861D92D65FB4F73014D2ECC20CD
+Jar inspection: archive integrity, 4.8.0 metadata, NeoForge minimum, explicit AT, both chatter resources, EliteCombat, PearlTrajectory, ShieldDefense and feint state classes confirmed.
+Source base: c1fcf77; local changes have not been committed or pushed.
+Full functional log: ai-hardness-4.8.0-selftest.log
+Build log: ai-hardness-4.8.0-build.log
+Progress: TerminatorPlus-NeoForge/AI_HARDNESS_PROGRESS.md
+Guide: TerminatorPlus-NeoForge/AI_HARDNESS.md
+
+This batch: actual retreat and elytra dive feints, enemy pearl trajectory forecasts and landing interception, observed totem-exhaustion pressure, damage-confirmed follow-up combos, standalone bow shots with mace disabled, and timed native shield defense at hardness 8-10.
+The 11 new functional scenarios verify actual movement within existing limits; damage cancellation; real native pearl teleport matching; actual landing attack; difficulty/toggle/unloaded terrain; resource-informed pressure; actual descending feint/pull-away; two real incoming arrow blocks preserving the same shield, components and finite durability; native cooldown/food mutual exclusion; two standalone native bow arrows; and actual cover preventing a false defensive action.
+Level 10 now checks skill-start opportunities by elapsed time, avoiding modulo alignment with short ground contacts. Levels 1-9 retain their prior start cadence.
+Functional fixtures use actual ServerPlayer targets and native projectile/damage events. They do not establish adjacent-level win-rate ordering, guaranteed interceptions, full team synchronization, or top-player equivalence.
+Remaining requirements are recorded in AI_HARDNESS_PROGRESS.md. The persistent development goal remains active.
+The asynchronous AI performance experiment remains paused at the user's request; its scratch prototype is excluded from this jar.
+Testing used an isolated self-test server. The user's live game server was not modified or started/stopped.

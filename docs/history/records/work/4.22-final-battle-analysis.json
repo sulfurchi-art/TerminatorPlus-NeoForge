@@ -1,0 +1,2027 @@
+[
+  {
+    "file": "C:\\Users\\13703\\Documents\\Codex\\2026-10-04\\http-200-https-github-com-sulfurchi\\work\\warfare-selftest\\logs\\terminatorplus\\battle-2026-10-07-01-16-49-332-fa836148.jsonl",
+    "events": {
+      "log_start": 1,
+      "mark": 1,
+      "match_start": 1,
+      "spawn": 2,
+      "target": 2,
+      "tactic": 2,
+      "role": 2,
+      "flight": 2,
+      "nav": 2,
+      "snap": 6,
+      "damage": 8,
+      "totem": 1,
+      "death": 1,
+      "match_end": 1,
+      "summary": 1,
+      "log_end": 1
+    },
+    "per_bot": {
+      "LogVictim": {
+        "spawn": 1,
+        "target": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 3,
+        "damage": 4,
+        "totem": 1,
+        "death": 1
+      },
+      "LogKiller": {
+        "spawn": 1,
+        "target": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 3,
+        "damage": 4
+      }
+    },
+    "drone_attacks": [],
+    "drone_height_samples": {},
+    "stages": {},
+    "summaries": [
+      {
+        "tick": 650,
+        "time": "01:16:55.337",
+        "type": "summary",
+        "bots": [
+          {
+            "bot": "LogVictim",
+            "kills": 0,
+            "deaths": 1,
+            "damageDealt": 1.0,
+            "damageTaken": 192.75,
+            "fire": 0,
+            "confirmedDamageEvents": 4,
+            "counts": {
+              "flight": 1,
+              "nav": 1,
+              "role": 1,
+              "snap": 3,
+              "spawn": 1,
+              "tactic": 1,
+              "target": 1,
+              "totem": 1
+            },
+            "averageTicks": {}
+          },
+          {
+            "bot": "LogKiller",
+            "kills": 1,
+            "deaths": 0,
+            "damageDealt": 192.75,
+            "damageTaken": 1.0,
+            "fire": 0,
+            "confirmedDamageEvents": 4,
+            "counts": {
+              "flight": 1,
+              "nav": 1,
+              "role": 1,
+              "snap": 3,
+              "spawn": 1,
+              "tactic": 1,
+              "target": 1
+            },
+            "averageTicks": {}
+          }
+        ],
+        "dropped": 0
+      }
+    ],
+    "warnings": [],
+    "potion_throw_count": 0
+  },
+  {
+    "file": "C:\\Users\\13703\\Documents\\Codex\\2026-10-04\\http-200-https-github-com-sulfurchi\\work\\warfare-selftest\\logs\\terminatorplus\\battle-2026-10-07-01-16-56-581-f2d5bac8.jsonl",
+    "events": {
+      "log_start": 1,
+      "match_start": 1,
+      "spawn": 1,
+      "tactic": 1,
+      "role": 1,
+      "flight": 1,
+      "nav": 1,
+      "death": 1,
+      "match_end": 1,
+      "summary": 1,
+      "log_end": 1
+    },
+    "per_bot": {
+      "FilteredVictim": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "death": 1
+      }
+    },
+    "drone_attacks": [],
+    "drone_height_samples": {},
+    "stages": {},
+    "summaries": [
+      {
+        "tick": 775,
+        "time": "01:17:01.583",
+        "type": "summary",
+        "bots": [
+          {
+            "bot": "FilteredVictim",
+            "kills": 0,
+            "deaths": 1,
+            "damageDealt": 0.0,
+            "damageTaken": 1150.0,
+            "fire": 0,
+            "confirmedDamageEvents": 0,
+            "counts": {
+              "flight": 1,
+              "nav": 1,
+              "role": 1,
+              "snap": 3,
+              "spawn": 1,
+              "tactic": 1
+            },
+            "averageTicks": {}
+          }
+        ],
+        "dropped": 0
+      }
+    ],
+    "warnings": [],
+    "potion_throw_count": 0
+  },
+  {
+    "file": "C:\\Users\\13703\\Documents\\Codex\\2026-10-04\\http-200-https-github-com-sulfurchi\\work\\warfare-selftest\\logs\\terminatorplus\\battle-2026-10-07-01-17-11-830-e767c6e6.jsonl",
+    "events": {
+      "log_start": 1,
+      "spawn": 100,
+      "tactic": 100,
+      "role": 100,
+      "flight": 100,
+      "nav": 100,
+      "snap": 500,
+      "log_end": 1
+    },
+    "per_bot": {
+      "LogLoad0": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad1": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad2": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad3": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad4": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad5": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad6": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad7": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad8": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad9": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad10": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad11": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad12": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad13": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad14": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad15": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad16": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad17": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad18": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad19": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad20": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad21": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad22": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad23": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad24": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad25": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad26": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad27": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad28": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad29": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad30": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad31": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad32": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad33": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad34": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad35": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad36": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad37": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad38": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad39": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad40": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad41": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad42": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad43": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad44": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad45": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad46": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad47": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad48": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad49": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad50": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad51": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad52": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad53": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad54": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad55": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad56": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad57": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad58": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad59": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad60": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad61": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad62": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad63": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad64": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad65": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad66": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad67": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad68": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad69": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad70": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad71": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad72": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad73": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad74": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad75": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad76": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad77": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad78": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad79": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad80": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad81": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad82": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad83": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad84": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad85": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad86": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad87": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad88": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad89": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad90": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad91": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad92": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad93": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad94": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad95": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad96": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad97": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad98": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      },
+      "LogLoad99": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 5
+      }
+    },
+    "drone_attacks": [],
+    "drone_height_samples": {},
+    "stages": {},
+    "summaries": [],
+    "warnings": [],
+    "potion_throw_count": 0
+  },
+  {
+    "file": "C:\\Users\\13703\\Documents\\Codex\\2026-10-04\\http-200-https-github-com-sulfurchi\\work\\warfare-selftest\\logs\\terminatorplus\\battle-2026-10-07-01-18-23-135-8624fde3.jsonl",
+    "events": {
+      "log_start": 1,
+      "spawn": 1,
+      "tactic": 1,
+      "role": 1,
+      "flight": 5,
+      "nav": 1,
+      "snap": 4,
+      "match_start": 1,
+      "c4_approach": 1,
+      "target": 5,
+      "c4_orbit_start": 1,
+      "elytra_takeoff": 1,
+      "c4_throw": 1,
+      "c4_detonate": 1,
+      "c4_end": 1,
+      "c4_exit": 1,
+      "match_end": 1,
+      "summary": 1,
+      "log_end": 1
+    },
+    "per_bot": {
+      "C4Pass0": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 5,
+        "nav": 1,
+        "snap": 4,
+        "c4_approach": 1,
+        "target": 5,
+        "c4_orbit_start": 1,
+        "elytra_takeoff": 1,
+        "c4_throw": 1,
+        "c4_detonate": 1,
+        "c4_end": 1,
+        "c4_exit": 1
+      }
+    },
+    "drone_attacks": [],
+    "drone_height_samples": {},
+    "stages": {
+      "C4Pass0": [
+        {
+          "tick": 2476,
+          "time": "01:18:26.629",
+          "type": "c4_approach",
+          "bot": "C4Pass0",
+          "uuid": "7613ace3-26f3-4259-b85d-59a629beee7d",
+          "team": null,
+          "level": 9,
+          "pos": [
+            23220.5,
+            -60.0,
+            0.5
+          ],
+          "dimension": "minecraft:overworld",
+          "target": {
+            "id": "superbwarfare:m_1a_2",
+            "uuid": "acf6e938-3037-43b8-8722-807527460598",
+            "name": "M1A2 MBT",
+            "pos": [
+              23238.5,
+              -60.0,
+              0.5
+            ]
+          },
+          "mode": "single_air_pass",
+          "orbitLimitTicks": 80
+        },
+        {
+          "tick": 2477,
+          "time": "01:18:26.679",
+          "type": "c4_orbit_start",
+          "bot": "C4Pass0",
+          "uuid": "7613ace3-26f3-4259-b85d-59a629beee7d",
+          "team": null,
+          "level": 9,
+          "pos": [
+            23220.5,
+            -60.0,
+            0.5
+          ],
+          "dimension": "minecraft:overworld",
+          "approachTicks": 1
+        },
+        {
+          "tick": 2487,
+          "time": "01:18:27.184",
+          "type": "c4_throw",
+          "bot": "C4Pass0",
+          "uuid": "7613ace3-26f3-4259-b85d-59a629beee7d",
+          "team": null,
+          "level": 9,
+          "pos": [
+            23229.1,
+            -54.1,
+            0.2
+          ],
+          "dimension": "minecraft:overworld",
+          "charge": {
+            "id": "superbwarfare:c4",
+            "uuid": "49884f85-60a7-46b7-861d-24ee35dfa7c3",
+            "name": "C4",
+            "pos": [
+              23229.3,
+              -52.8,
+              0.2
+            ]
+          },
+          "durationTicks": 11,
+          "approachTicks": 1,
+          "orbitTicks": 10,
+          "orbits": 0.005248705546061198
+        },
+        {
+          "tick": 2505,
+          "time": "01:18:28.100",
+          "type": "c4_detonate",
+          "bot": "C4Pass0",
+          "uuid": "7613ace3-26f3-4259-b85d-59a629beee7d",
+          "team": null,
+          "level": 9,
+          "pos": [
+            23259.0,
+            -54.6,
+            -0.8
+          ],
+          "dimension": "minecraft:overworld",
+          "durationTicks": 18,
+          "totalTicks": 29,
+          "ownedCharges": 1
+        },
+        {
+          "tick": 2505,
+          "time": "01:18:28.100",
+          "type": "c4_end",
+          "bot": "C4Pass0",
+          "uuid": "7613ace3-26f3-4259-b85d-59a629beee7d",
+          "team": null,
+          "level": 9,
+          "pos": [
+            23259.0,
+            -54.6,
+            -0.8
+          ],
+          "dimension": "minecraft:overworld",
+          "reason": "DETONATED",
+          "aborted": false,
+          "durationTicks": 29,
+          "orbitTicks": 10,
+          "orbits": 0.005248705546061198
+        },
+        {
+          "tick": 2514,
+          "time": "01:18:28.528",
+          "type": "c4_exit",
+          "bot": "C4Pass0",
+          "uuid": "7613ace3-26f3-4259-b85d-59a629beee7d",
+          "team": null,
+          "level": 9,
+          "pos": [
+            23273.5,
+            -58.4,
+            -1.2
+          ],
+          "dimension": "minecraft:overworld",
+          "durationTicks": 9,
+          "reason": "bounded_descent_finished"
+        }
+      ]
+    },
+    "summaries": [
+      {
+        "tick": 2570,
+        "time": "01:18:31.328",
+        "type": "summary",
+        "bots": [
+          {
+            "bot": "C4Pass0",
+            "kills": 0,
+            "deaths": 0,
+            "damageDealt": 0.0,
+            "damageTaken": 0.0,
+            "fire": 0,
+            "confirmedDamageEvents": 0,
+            "counts": {
+              "c4_approach": 1,
+              "c4_detonate": 1,
+              "c4_end": 1,
+              "c4_exit": 1,
+              "c4_orbit_start": 1,
+              "c4_throw": 1,
+              "elytra_takeoff": 1,
+              "flight": 4,
+              "snap": 3,
+              "target": 5
+            },
+            "averageTicks": {
+              "c4_detonate": 18.0,
+              "c4_end": 29.0,
+              "c4_exit": 9.0,
+              "c4_throw": 11.0
+            }
+          }
+        ],
+        "dropped": 0
+      }
+    ],
+    "warnings": [],
+    "potion_throw_count": 0
+  },
+  {
+    "file": "C:\\Users\\13703\\Documents\\Codex\\2026-10-04\\http-200-https-github-com-sulfurchi\\work\\warfare-selftest\\logs\\terminatorplus\\battle-2026-10-07-01-18-31-877-6a425d11.jsonl",
+    "events": {
+      "log_start": 1,
+      "spawn": 1,
+      "tactic": 1,
+      "role": 1,
+      "flight": 5,
+      "nav": 1,
+      "snap": 5,
+      "match_start": 1,
+      "c4_approach": 1,
+      "target": 1,
+      "elytra_takeoff": 1,
+      "c4_orbit_start": 1,
+      "c4_throw": 1,
+      "c4_detonate": 1,
+      "c4_end": 1,
+      "c4_exit": 1,
+      "match_end": 1,
+      "summary": 1,
+      "log_end": 1
+    },
+    "per_bot": {
+      "C4Pass1": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 5,
+        "nav": 1,
+        "snap": 5,
+        "c4_approach": 1,
+        "target": 1,
+        "elytra_takeoff": 1,
+        "c4_orbit_start": 1,
+        "c4_throw": 1,
+        "c4_detonate": 1,
+        "c4_end": 1,
+        "c4_exit": 1
+      }
+    },
+    "drone_attacks": [],
+    "drone_height_samples": {},
+    "stages": {
+      "C4Pass1": [
+        {
+          "tick": 2651,
+          "time": "01:18:35.378",
+          "type": "c4_approach",
+          "bot": "C4Pass1",
+          "uuid": "ad66028d-000c-4ac1-b4f4-c99bf0ac2ea6",
+          "team": null,
+          "level": 10,
+          "pos": [
+            23520.5,
+            -60.0,
+            0.5
+          ],
+          "dimension": "minecraft:overworld",
+          "target": {
+            "id": "superbwarfare:m_1a_2",
+            "uuid": "f37fc478-1fbd-4bec-9f99-f401a08c1104",
+            "name": "M1A2 MBT",
+            "pos": [
+              23588.5,
+              -60.0,
+              0.5
+            ]
+          },
+          "mode": "single_air_pass",
+          "orbitLimitTicks": 80
+        },
+        {
+          "tick": 2684,
+          "time": "01:18:37.028",
+          "type": "c4_orbit_start",
+          "bot": "C4Pass1",
+          "uuid": "ad66028d-000c-4ac1-b4f4-c99bf0ac2ea6",
+          "team": null,
+          "level": 10,
+          "pos": [
+            23565.6,
+            -54.8,
+            0.1
+          ],
+          "dimension": "minecraft:overworld",
+          "approachTicks": 33
+        },
+        {
+          "tick": 2693,
+          "time": "01:18:37.478",
+          "type": "c4_throw",
+          "bot": "C4Pass1",
+          "uuid": "ad66028d-000c-4ac1-b4f4-c99bf0ac2ea6",
+          "team": null,
+          "level": 10,
+          "pos": [
+            23579.8,
+            -55.5,
+            0.0
+          ],
+          "dimension": "minecraft:overworld",
+          "charge": {
+            "id": "superbwarfare:c4",
+            "uuid": "d1e3973e-ae8d-41f8-8560-04fbadff7688",
+            "name": "C4",
+            "pos": [
+              23580.0,
+              -54.2,
+              0.0
+            ]
+          },
+          "durationTicks": 42,
+          "approachTicks": 33,
+          "orbitTicks": 9,
+          "orbits": 0.0013902664184570312
+        },
+        {
+          "tick": 2713,
+          "time": "01:18:38.482",
+          "type": "c4_detonate",
+          "bot": "C4Pass1",
+          "uuid": "ad66028d-000c-4ac1-b4f4-c99bf0ac2ea6",
+          "team": null,
+          "level": 10,
+          "pos": [
+            23607.9,
+            -56.2,
+            -0.3
+          ],
+          "dimension": "minecraft:overworld",
+          "durationTicks": 20,
+          "totalTicks": 62,
+          "ownedCharges": 1
+        },
+        {
+          "tick": 2713,
+          "time": "01:18:38.482",
+          "type": "c4_end",
+          "bot": "C4Pass1",
+          "uuid": "ad66028d-000c-4ac1-b4f4-c99bf0ac2ea6",
+          "team": null,
+          "level": 10,
+          "pos": [
+            23607.9,
+            -56.2,
+            -0.3
+          ],
+          "dimension": "minecraft:overworld",
+          "reason": "DETONATED",
+          "aborted": false,
+          "durationTicks": 62,
+          "orbitTicks": 9,
+          "orbits": 0.0013902664184570312
+        },
+        {
+          "tick": 2724,
+          "time": "01:18:39.028",
+          "type": "c4_exit",
+          "bot": "C4Pass1",
+          "uuid": "ad66028d-000c-4ac1-b4f4-c99bf0ac2ea6",
+          "team": null,
+          "level": 10,
+          "pos": [
+            23621.2,
+            -58.3,
+            -0.4
+          ],
+          "dimension": "minecraft:overworld",
+          "durationTicks": 11,
+          "reason": "bounded_descent_finished"
+        }
+      ]
+    },
+    "summaries": [
+      {
+        "tick": 2780,
+        "time": "01:18:41.828",
+        "type": "summary",
+        "bots": [
+          {
+            "bot": "C4Pass1",
+            "kills": 0,
+            "deaths": 0,
+            "damageDealt": 0.0,
+            "damageTaken": 0.0,
+            "fire": 0,
+            "confirmedDamageEvents": 0,
+            "counts": {
+              "c4_approach": 1,
+              "c4_detonate": 1,
+              "c4_end": 1,
+              "c4_exit": 1,
+              "c4_orbit_start": 1,
+              "c4_throw": 1,
+              "elytra_takeoff": 1,
+              "flight": 4,
+              "snap": 3,
+              "target": 1
+            },
+            "averageTicks": {
+              "c4_detonate": 20.0,
+              "c4_end": 62.0,
+              "c4_exit": 11.0,
+              "c4_throw": 42.0
+            }
+          }
+        ],
+        "dropped": 0
+      }
+    ],
+    "warnings": [],
+    "potion_throw_count": 0
+  },
+  {
+    "file": "C:\\Users\\13703\\Documents\\Codex\\2026-10-04\\http-200-https-github-com-sulfurchi\\work\\warfare-selftest\\logs\\terminatorplus\\battle-2026-10-07-01-18-42-370-b65bdd80.jsonl",
+    "events": {
+      "log_start": 1,
+      "spawn": 1,
+      "tactic": 1,
+      "role": 1,
+      "flight": 5,
+      "nav": 1,
+      "snap": 4,
+      "match_start": 1,
+      "c4_approach": 1,
+      "target": 3,
+      "elytra_takeoff": 1,
+      "c4_orbit_start": 1,
+      "c4_end": 1,
+      "c4_exit": 1,
+      "match_end": 1,
+      "summary": 1,
+      "log_end": 1
+    },
+    "per_bot": {
+      "C4Pass2": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 5,
+        "nav": 1,
+        "snap": 4,
+        "c4_approach": 1,
+        "target": 3,
+        "elytra_takeoff": 1,
+        "c4_orbit_start": 1,
+        "c4_end": 1,
+        "c4_exit": 1
+      }
+    },
+    "drone_attacks": [],
+    "drone_height_samples": {},
+    "stages": {
+      "C4Pass2": [
+        {
+          "tick": 2861,
+          "time": "01:18:45.878",
+          "type": "c4_approach",
+          "bot": "C4Pass2",
+          "uuid": "f88e431b-70f0-49d1-a61b-4255a9cb08a6",
+          "team": "c4_pass_safe",
+          "level": 9,
+          "pos": [
+            23820.5,
+            -60.0,
+            0.5
+          ],
+          "dimension": "minecraft:overworld",
+          "target": {
+            "id": "superbwarfare:m_1a_2",
+            "uuid": "10fb0ee6-0c79-48d6-813c-b5a45f16ce3c",
+            "name": "M1A2 MBT",
+            "pos": [
+              23860.5,
+              -60.0,
+              0.5
+            ]
+          },
+          "mode": "single_air_pass",
+          "orbitLimitTicks": 80
+        },
+        {
+          "tick": 2877,
+          "time": "01:18:46.678",
+          "type": "c4_orbit_start",
+          "bot": "C4Pass2",
+          "uuid": "f88e431b-70f0-49d1-a61b-4255a9cb08a6",
+          "team": "c4_pass_safe",
+          "level": 9,
+          "pos": [
+            23837.3,
+            -54.1,
+            0.3
+          ],
+          "dimension": "minecraft:overworld",
+          "approachTicks": 16
+        },
+        {
+          "tick": 2884,
+          "time": "01:18:47.028",
+          "type": "c4_end",
+          "bot": "C4Pass2",
+          "uuid": "f88e431b-70f0-49d1-a61b-4255a9cb08a6",
+          "team": "c4_pass_safe",
+          "level": 9,
+          "pos": [
+            23849.0,
+            -54.4,
+            0.1
+          ],
+          "dimension": "minecraft:overworld",
+          "reason": "UNSAFE_PASS",
+          "aborted": true,
+          "durationTicks": 23,
+          "orbitTicks": 7,
+          "orbits": 0.002365790473090278
+        },
+        {
+          "tick": 2890,
+          "time": "01:18:47.327",
+          "type": "c4_exit",
+          "bot": "C4Pass2",
+          "uuid": "f88e431b-70f0-49d1-a61b-4255a9cb08a6",
+          "team": "c4_pass_safe",
+          "level": 9,
+          "pos": [
+            23857.8,
+            -58.0,
+            -0.1
+          ],
+          "dimension": "minecraft:overworld",
+          "durationTicks": 6,
+          "reason": "bounded_descent_finished"
+        }
+      ]
+    },
+    "summaries": [
+      {
+        "tick": 2950,
+        "time": "01:18:50.328",
+        "type": "summary",
+        "bots": [
+          {
+            "bot": "C4Pass2",
+            "kills": 0,
+            "deaths": 0,
+            "damageDealt": 0.0,
+            "damageTaken": 0.0,
+            "fire": 0,
+            "confirmedDamageEvents": 0,
+            "counts": {
+              "c4_approach": 1,
+              "c4_end": 1,
+              "c4_exit": 1,
+              "c4_orbit_start": 1,
+              "elytra_takeoff": 1,
+              "flight": 4,
+              "snap": 2,
+              "target": 3
+            },
+            "averageTicks": {
+              "c4_end": 23.0,
+              "c4_exit": 6.0
+            }
+          }
+        ],
+        "dropped": 0
+      }
+    ],
+    "warnings": [],
+    "potion_throw_count": 0
+  },
+  {
+    "file": "C:\\Users\\13703\\Documents\\Codex\\2026-10-04\\http-200-https-github-com-sulfurchi\\work\\warfare-selftest\\logs\\terminatorplus\\battle-2026-10-07-01-22-08-095-f1119fa6.jsonl",
+    "events": {
+      "log_start": 1,
+      "match_start": 1,
+      "drone_launch": 1,
+      "drone_target": 1,
+      "spawn": 1,
+      "target": 1,
+      "tactic": 1,
+      "role": 1,
+      "flight": 1,
+      "nav": 1,
+      "drone_sample": 10,
+      "snap": 16,
+      "drone_attack": 4,
+      "damage": 16,
+      "drone_return": 1,
+      "drone_lost": 1,
+      "match_end": 1,
+      "summary": 1,
+      "log_end": 1
+    },
+    "per_bot": {
+      "FastSuppressor": {
+        "drone_launch": 1,
+        "drone_target": 1,
+        "spawn": 1,
+        "target": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "drone_sample": 10,
+        "snap": 16,
+        "drone_attack": 4,
+        "damage": 16,
+        "drone_return": 1,
+        "drone_lost": 1
+      }
+    },
+    "drone_attacks": [
+      {
+        "bot": "FastSuppressor",
+        "firstAttackLatencyTicks": 67,
+        "horizontalDistance": 8.257189710281137,
+        "round": 1,
+        "kind": "drop"
+      },
+      {
+        "bot": "FastSuppressor",
+        "firstAttackLatencyTicks": 67,
+        "horizontalDistance": 0.709108720226954,
+        "round": 2,
+        "kind": "drop"
+      },
+      {
+        "bot": "FastSuppressor",
+        "firstAttackLatencyTicks": 67,
+        "horizontalDistance": 1.8496919850054778,
+        "round": 3,
+        "kind": "drop"
+      },
+      {
+        "bot": "FastSuppressor",
+        "firstAttackLatencyTicks": 67,
+        "horizontalDistance": 6.683845931655307,
+        "round": 4,
+        "kind": "drop"
+      }
+    ],
+    "drone_height_samples": {
+      "a5ebd5b7-53fb-4cf4-bccd-33a92aff8c57": [
+        {
+          "tick": 6920,
+          "height": -59.22300005789099,
+          "vy": 0.06799998819828035,
+          "mode": "attack"
+        },
+        {
+          "tick": 6940,
+          "height": -56.420500111177525,
+          "vy": 0.1690000059008598,
+          "mode": "attack"
+        },
+        {
+          "tick": 6960,
+          "height": -53.5165000507384,
+          "vy": 0.16000000178813933,
+          "mode": "attack"
+        },
+        {
+          "tick": 6980,
+          "height": -51.93150191817853,
+          "vy": 0.011169574003350141,
+          "mode": "attack"
+        },
+        {
+          "tick": 7000,
+          "height": -51.950265749432674,
+          "vy": 0.0020691415206876354,
+          "mode": "attack"
+        },
+        {
+          "tick": 7020,
+          "height": -50.50254226465004,
+          "vy": 0.1690000059008598,
+          "mode": "attack"
+        },
+        {
+          "tick": 7040,
+          "height": -52.00234214532748,
+          "vy": -0.07400000080466271,
+          "mode": "return"
+        },
+        {
+          "tick": 7060,
+          "height": -54.068942169744496,
+          "vy": -0.10780000199377537,
+          "mode": "return"
+        },
+        {
+          "tick": 7080,
+          "height": -56.101742192972395,
+          "vy": -0.12400000080466271,
+          "mode": "return"
+        },
+        {
+          "tick": 7100,
+          "height": -57.83705112117037,
+          "vy": -0.024524704015094087,
+          "mode": "return"
+        }
+      ]
+    },
+    "stages": {},
+    "summaries": [
+      {
+        "tick": 7525,
+        "time": "01:22:39.070",
+        "type": "summary",
+        "bots": [
+          {
+            "bot": "FastSuppressor",
+            "kills": 0,
+            "deaths": 0,
+            "damageDealt": 91.84803360700607,
+            "damageTaken": 0.0,
+            "fire": 0,
+            "confirmedDamageEvents": 16,
+            "counts": {
+              "drone_attack": 4,
+              "drone_launch": 1,
+              "drone_lost": 1,
+              "drone_return": 1,
+              "drone_sample": 10,
+              "drone_target": 1,
+              "flight": 1,
+              "nav": 1,
+              "role": 1,
+              "snap": 16,
+              "spawn": 1,
+              "tactic": 1,
+              "target": 1
+            },
+            "averageTicks": {
+              "drone_attack": 91.0,
+              "drone_lost": 195.0,
+              "drone_return": 115.0
+            }
+          }
+        ],
+        "dropped": 0
+      }
+    ],
+    "warnings": [],
+    "potion_throw_count": 0
+  },
+  {
+    "file": "C:\\Users\\13703\\Documents\\Codex\\2026-10-04\\http-200-https-github-com-sulfurchi\\work\\warfare-selftest\\logs\\terminatorplus\\battle-2026-10-07-01-22-39-580-58062f51.jsonl",
+    "events": {
+      "log_start": 1,
+      "match_start": 1,
+      "board_request": 1,
+      "board_ok": 1,
+      "weapon_select": 5,
+      "spawn": 1,
+      "target": 1,
+      "tactic": 1,
+      "role": 1,
+      "flight": 1,
+      "nav": 5,
+      "fire": 65,
+      "vehicle_snap": 5,
+      "snap": 5,
+      "projectile_hit": 38,
+      "damage": 76,
+      "match_end": 1,
+      "summary": 1,
+      "log_end": 1
+    },
+    "per_bot": {
+      "LoggedDriver": {
+        "board_request": 1,
+        "board_ok": 1,
+        "weapon_select": 5,
+        "spawn": 1,
+        "target": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 5,
+        "fire": 65,
+        "vehicle_snap": 5,
+        "snap": 5,
+        "projectile_hit": 38,
+        "damage": 76
+      }
+    },
+    "drone_attacks": [],
+    "drone_height_samples": {},
+    "stages": {},
+    "summaries": [
+      {
+        "tick": 7735,
+        "time": "01:22:49.571",
+        "type": "summary",
+        "bots": [
+          {
+            "bot": "LoggedDriver",
+            "kills": 0,
+            "deaths": 0,
+            "damageDealt": 482.9211183786392,
+            "damageTaken": 0.0,
+            "fire": 65,
+            "confirmedDamageEvents": 76,
+            "counts": {
+              "board_ok": 1,
+              "board_request": 1,
+              "fire": 65,
+              "flight": 1,
+              "nav": 5,
+              "projectile_hit": 38,
+              "role": 1,
+              "snap": 5,
+              "spawn": 1,
+              "tactic": 1,
+              "target": 1,
+              "vehicle_snap": 5,
+              "weapon_select": 5
+            },
+            "averageTicks": {}
+          }
+        ],
+        "dropped": 0
+      }
+    ],
+    "warnings": [],
+    "potion_throw_count": 0
+  },
+  {
+    "file": "C:\\Users\\13703\\Documents\\Codex\\2026-10-04\\http-200-https-github-com-sulfurchi\\work\\warfare-selftest\\logs\\terminatorplus\\battle-2026-10-07-01-22-50-102-433198b2.jsonl",
+    "events": {
+      "log_start": 1,
+      "spawn": 2,
+      "tactic": 2,
+      "role": 2,
+      "flight": 2,
+      "nav": 2,
+      "snap": 12,
+      "shelter_start": 1,
+      "block_place": 4,
+      "shelter_done": 1,
+      "shelter_removed": 1,
+      "missile_seen": 3,
+      "projectile_hit": 1,
+      "log_end": 1
+    },
+    "per_bot": {
+      "CooldownCover": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 6,
+        "shelter_start": 1,
+        "block_place": 4,
+        "shelter_done": 1,
+        "shelter_removed": 1,
+        "missile_seen": 3
+      },
+      "RepeatedLauncher": {
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 1,
+        "snap": 6,
+        "projectile_hit": 1
+      }
+    },
+    "drone_attacks": [],
+    "drone_height_samples": {},
+    "stages": {
+      "CooldownCover": [
+        {
+          "tick": 7826,
+          "time": "01:22:54.121",
+          "type": "shelter_start",
+          "bot": "CooldownCover",
+          "uuid": "49145e57-2308-4ffd-9e8b-5eb6b2caf139",
+          "team": null,
+          "level": 10,
+          "pos": [
+            30100.5,
+            -60.0,
+            0.5
+          ],
+          "dimension": "minecraft:overworld",
+          "missile": {
+            "id": "superbwarfare:javelin_missile",
+            "uuid": "409b650b-4bdb-456f-9ba7-d86b26c369c1",
+            "name": "Javelin Missile",
+            "pos": [
+              30013.4,
+              -57.7,
+              0.6
+            ]
+          },
+          "cooldownTicks": 500,
+          "limit": 4
+        },
+        {
+          "tick": 7826,
+          "time": "01:22:54.122",
+          "type": "shelter_done",
+          "bot": "CooldownCover",
+          "uuid": "49145e57-2308-4ffd-9e8b-5eb6b2caf139",
+          "team": null,
+          "level": 10,
+          "pos": [
+            30100.5,
+            -60.0,
+            0.5
+          ],
+          "dimension": "minecraft:overworld",
+          "blocks": 4,
+          "durationTicks": 0
+        },
+        {
+          "tick": 7854,
+          "time": "01:22:55.520",
+          "type": "shelter_removed",
+          "bot": "CooldownCover",
+          "uuid": "49145e57-2308-4ffd-9e8b-5eb6b2caf139",
+          "team": null,
+          "level": 10,
+          "pos": [
+            30100.5,
+            -60.1,
+            0.5
+          ],
+          "dimension": "minecraft:overworld",
+          "blocks": 2,
+          "ownedBlocks": 3,
+          "pending": 0,
+          "durationTicks": 28,
+          "reason": "threat_passed",
+          "removal": "matching_owned_blocks_only"
+        }
+      ]
+    },
+    "summaries": [],
+    "warnings": [],
+    "potion_throw_count": 0
+  },
+  {
+    "file": "C:\\Users\\13703\\Documents\\Codex\\2026-10-04\\http-200-https-github-com-sulfurchi\\work\\warfare-selftest\\logs\\terminatorplus\\battle-2026-10-07-01-24-18-697-7394c602.jsonl",
+    "events": {
+      "log_start": 1,
+      "match_start": 1,
+      "board_request": 1,
+      "board_ok": 1,
+      "spawn": 1,
+      "tactic": 1,
+      "role": 1,
+      "flight": 1,
+      "nav": 5,
+      "weapon_select": 5,
+      "target": 1,
+      "vehicle_snap": 5,
+      "snap": 5,
+      "fire": 65,
+      "projectile_hit": 35,
+      "damage": 70,
+      "match_end": 1,
+      "summary": 1,
+      "log_end": 1
+    },
+    "per_bot": {
+      "LoggedDriver": {
+        "board_request": 1,
+        "board_ok": 1,
+        "spawn": 1,
+        "tactic": 1,
+        "role": 1,
+        "flight": 1,
+        "nav": 5,
+        "weapon_select": 5,
+        "target": 1,
+        "vehicle_snap": 5,
+        "snap": 5,
+        "fire": 65,
+        "projectile_hit": 35,
+        "damage": 70
+      }
+    },
+    "drone_attacks": [],
+    "drone_height_samples": {},
+    "stages": {},
+    "summaries": [
+      {
+        "tick": 435,
+        "time": "01:24:28.659",
+        "type": "summary",
+        "bots": [
+          {
+            "bot": "LoggedDriver",
+            "kills": 0,
+            "deaths": 0,
+            "damageDealt": 436.14387226104736,
+            "damageTaken": 0.0,
+            "fire": 65,
+            "confirmedDamageEvents": 70,
+            "counts": {
+              "board_ok": 1,
+              "board_request": 1,
+              "fire": 65,
+              "flight": 1,
+              "nav": 5,
+              "projectile_hit": 35,
+              "role": 1,
+              "snap": 5,
+              "spawn": 1,
+              "tactic": 1,
+              "target": 1,
+              "vehicle_snap": 5,
+              "weapon_select": 5
+            },
+            "averageTicks": {}
+          }
+        ],
+        "dropped": 0
+      }
+    ],
+    "warnings": [],
+    "potion_throw_count": 0
+  }
+]

@@ -1,0 +1,36 @@
+{
+  "version": "4.21.0-BETA",
+  "jar": "C:\\Users\\13703\\Documents\\Codex\\2026-10-04\\http-200-https-github-com-sulfurchi\\outputs\\TerminatorPlus-NeoForge-1.21.1-4.21.0-BETA.jar",
+  "bytes": 793522,
+  "sha256": "9A491FE1BA42C1933B271B213F7E19305386107A5C145DEC708CAA1B0DDACD57",
+  "targeted_native_pass": 28,
+  "targeted_native_fail": 0,
+  "new_close_road_pass": 10,
+  "full_native_116_not_run": true,
+  "base_130_not_run": true,
+  "frozen_files": 114,
+  "classes": 181,
+  "native_minimum_jar_class_bytes_match": true,
+  "minimum_neoforge": "21.1.1",
+  "jar_crc_verified": true,
+  "sealed_4_20_and_4_19_preserved": true,
+  "logs": [
+    "ai-hardness-4.21-close-road-baseline.log",
+    "ai-hardness-4.21-close-road-1.log",
+    "ai-hardness-4.21-close-allied-baseline.log",
+    "ai-hardness-4.21-close-road-2.log",
+    "ai-hardness-4.21-close-allied-3.log",
+    "ai-hardness-4.21-close-allied-4.log",
+    "ai-hardness-4.21-close-road-5.log",
+    "ai-hardness-4.21-flank-1.log",
+    "ai-hardness-4.21-road-regression.log",
+    "ai-hardness-4.21-road-regression-2.log",
+    "ai-hardness-4.21-build.log"
+  ],
+  "known_prior_issues": [
+    "fixed three-block pit second crew boarding timeout",
+    "formal YX100 NO_ROUTE not reproduced",
+    "LAV-AD ground weapon behavior",
+    "historical infantry border and TeamDive failures"
+  ]
+}
