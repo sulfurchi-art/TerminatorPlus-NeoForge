@@ -1,7 +1,7 @@
 # 开发交接文档
 
 > 写给接手这个项目的 AI 编程助手。人类用户说中文，回复请用简体中文。
-> 最后更新：2026-10-06（4.19.0-BETA 陆地载具寻路）。面向玩家的用法见 `README.md` 和 `AI_HARDNESS.md`，本文件讲实现细节、测试方法和接手须知。
+> 最后更新：2026-10-06（4.20.0-BETA C4 投放修正）。面向玩家的用法见 `README.md` 和 `AI_HARDNESS.md`，本文件讲实现细节、测试方法和接手须知。
 
 ## 项目是什么
 
@@ -21,7 +21,7 @@
 
 ```bash
 export JAVA_HOME="C:/Program Files/Microsoft/jdk-21.0.7.6-hotspot"   # 用户机器上的 JDK 21
-./gradlew build          # 产物：build/libs/TerminatorPlus-NeoForge-1.21.1-4.19.0-BETA.jar
+./gradlew build          # 产物：build/libs/TerminatorPlus-NeoForge-1.21.1-4.20.0-BETA.jar
 ./gradlew runSelfTest    # 全套自测，约 6–8 分钟，见下文"测试"
 ```
 
@@ -381,3 +381,11 @@ export JAVA_HOME="C:/Program Files/Microsoft/jdk-21.0.7.6-hotspot"   # 用户机
 首轮完整 99/102，失败为旧目标搜索、双车登座、水沟余量。前两项单项复测通过，但顺序测试重现道路被移除后登车者掉坑；尚未唯一证明移除方块的来源。保留失败/诊断日志，不能宣称第三方延迟破坏的根因已解决。自测新增跟踪本测试已发射弹体，仅在当前场景断言结束后清理，避免弹体进入下一夹具；不会提前删除正在验证的标枪或修改正式服。最终四个 Java 文件相对 4.18 改动：VehicleNavigation、VehiclePilot、VehicleCrew、SelfTest。
 
 4.19 封包后续优先项：第二车组绕固定深坑登座仍超时；先修复登车，再跑最终 102 项原生专项与 130 项基础回归。封包前 99/102、14/15 属于较早源码，不能代替最终源码；封包保存已知失败。
+
+## 4.20 C4 投放修正交接
+
+- 用户直接要求减少丢 C4 的盘旋，新范围优先于旧的深坑登车后续安排；本批不宣称修复该问题。4.19 源码快照在 work/TerminatorPlus-NeoForge-4.19-source-checkpoint.zip，原封包保留。
+- WarfareTactics 的 C4 State 记录固定 passDirection、最近观察 targetBounds、closest/progressAt、placedAt 和 c4Result。飞行目标在车另一侧，飞过 8 格、接近超 120 tick/40 tick 无进展退出；友军阻止投放立即退出。EGRESS 的目标持续位于前方，100 tick 超时保留原生炸药；结束向前落地，不再返回 home。原 300 tick 重试与主动飞行间隔保留。
+- c4Throw 用五个角度、30 tick 上限模拟原生 C4 0.5 速度、出生偏移、float 0.99 空气阻力与 move-then-0.05-gravity；预测只读取已加载区块/边界/方块及可见时缓存的 AABB。最近观察外推不超过 25 tick，投放观察年龄不超过 30 tick。手持原生 use 完成后恢复原飞行 yaw/pitch，防止 throw aim 改变下一刻鞘翅运动；不直接改机器人或炸药位置/速度。
+- ElytraPilot 仅 C4 takeoff 俯仰从 -50 改为 -25；其他计划不改，仍用原版滑翔、原有转向/烟花与速度。原生起爆器仍检查全部自有遥控 C4 的自伤/友军/友车安全，不单独伪造爆炸或删炸药。
+- 新增四项真实原生 C4 场景，原生定义 106、基础 130。测试跟踪一轮耗时、实际扣弹/原生伤害、累计 yaw 小于 90 度、未误伤，以及超时两颗原生炸药保留。修改前新三项基线 2/3，友军阻止投放场景九秒约五圈；首次五项 5/5。最终定向原生专项 **27/27 全部通过**（12 项原有 ordnance、4 项新增 C4、11 项标枪反制）；最低 NeoForge 21.1.1 / Java 21 构建通过。114 个源/构建文件冻结核对，181 个定向原生编译、最低版本编译与 JAR 类逐字节一致，CRC/元数据/AT 核对通过。完整 106 项原生专项和 130 项基础回归未重跑。，见 docs/c4-low-pass-4.20.md。异线程/正式服/其他清单保持原约定。

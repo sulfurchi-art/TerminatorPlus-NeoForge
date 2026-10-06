@@ -32,6 +32,11 @@ public final class WarfareTactics {
         Hand hand;
         UUID target, charge;
         Vec3 observed, velocity = Vec3.ZERO, home;
+        Vec3 passDirection = Vec3.ZERO;
+        AABB targetBounds;
+        double closest;
+        long progressAt, placedAt;
+        String c4Result = "";
         long started, seen, nextAttempt, nextFire;
         int lastVertical, verticalTicks, drops, detonations;
         boolean returning;
@@ -43,7 +48,8 @@ public final class WarfareTactics {
     WarfareTactics(BotSkills skills) { this.skills = skills; }
     public String describe(Bot bot) {
         State s = states.get(bot);
-        return s == null ? "" : "; ordnance=" + s.mode + "; droneDrops=" + s.drops + "; c4Detonations=" + s.detonations;
+        return s == null ? "" : "; ordnance=" + s.mode + "; droneDrops=" + s.drops + "; c4Detonations=" + s.detonations
+                + (s.c4Result.isEmpty() ? "" : "; c4Result=" + s.c4Result);
     }
     public Entity drone(Bot bot) { State s = states.get(bot); return s == null || s.drone == null ? null : s.drone.entity(); }
     public int drops(Bot bot) { State s = states.get(bot); return s == null ? 0 : s.drops; }
@@ -57,8 +63,14 @@ public final class WarfareTactics {
         if (s.hand != null) s.hand.close();
         BotMemory mem = skills.memory(bot);
         if (mem.plan == BotMemory.FlightPlan.C4) {
+            // Finish in the current pass direction; returning to the launch point causes another U-turn.
+            Vec3 forward = s.passDirection.lengthSqr() > 0.1 ? s.passDirection : bot.getVelocity().multiply(1, 0, 1).normalize();
+            Vec3 landing = MovementBounds.clamp(bot, bot.position().add(forward.scale(24)), 8);
+            double ground = bot.getBotLevel().hasChunkAt(BlockPos.containing(landing))
+                    ? SkillUtil.surfaceY(bot.getBotLevel(), landing) : bot.getY() - 2;
             mem.plan = BotMemory.FlightPlan.TRAVEL;
-            mem.flightGoal = s.home == null ? null : MovementBounds.clamp(bot, s.home, 8);
+            mem.flightGoal = new Vec3(landing.x, ground, landing.z);
+            if (s.c4Result.equals("APPROACH") || s.c4Result.equals("PLACED")) s.c4Result = "CANCELLED";
         }
         s.hand = null; s.drone = null; s.target = null; s.charge = null;
         s.mode = Mode.IDLE;
@@ -110,7 +122,11 @@ public final class WarfareTactics {
             BotMemory mem = skills.memory(bot);
             if (skills.pilot().tryStart(bot, mem, BotMemory.FlightPlan.C4, now)) {
                 start(s, enemy.getRootVehicle(), bot.position(), now); s.mode = Mode.C4_APPROACH;
-                mem.flightGoal = s.observed; skills.warfare().release(bot); return true;
+                s.passDirection = s.observed.subtract(bot.position()).multiply(1, 0, 1).normalize();
+                s.targetBounds = enemy.getRootVehicle().getBoundingBox();
+                s.closest = SkillUtil.horizontalDistance(bot.position(), s.observed); s.progressAt = now; s.placedAt = 0;
+                s.c4Result = "APPROACH";
+                mem.flightGoal = s.observed.add(s.passDirection.scale(40)); skills.warfare().release(bot); return true;
             }
         }
         if (skills.enabled(bot, "drones") && states.values().stream().filter(st -> st.mode == Mode.DRONE).count() < 8 && distance >= 30 && distance <= 100 && has(bot, "monitor")) {
@@ -284,65 +300,113 @@ public final class WarfareTactics {
     private boolean tickC4(Bot bot, State s, @Nullable LivingEntity enemy, WarfareAccess.Ordnance ordnance, long now) {
         BotMemory mem = skills.memory(bot);
         Entity target = bot.getBotLevel().getEntity(s.target);
+        // Remembered motion is bounded; hidden opponents never supply fresh coordinates.
+        if (target != null && enemy != null && enemy.getRootVehicle() == target && skills.canSee(bot, enemy) && bot.hasLineOfSight(enemy)) {
+            s.observed = target.getBoundingBox().getCenter(); s.targetBounds = target.getBoundingBox();
+            s.velocity = target.getDeltaMovement(); s.seen = now;
+        }
+        Vec3 predicted = s.observed.add(s.velocity.scale(Math.min(25, now - s.seen)));
         if (s.mode == Mode.C4_APPROACH) {
             if (!has(bot, "c4_bomb") || !has(bot, "detonator") || !skills.pilot().canFly(bot) || target == null || !target.isAlive()
                     || bot.isAlliedTo(target) || target.getPassengers().stream().anyMatch(bot::isAlliedTo)) { cancel(bot); return false; }
-            // Only a currently seen opponent supplies new position/velocity data.
-            if (enemy != null && enemy.getRootVehicle() == target && skills.canSee(bot, enemy) && bot.hasLineOfSight(enemy)) {
-                s.observed = target.getBoundingBox().getCenter(); s.velocity = target.getDeltaMovement(); s.seen = now;
-            }
             if (now - s.seen > 80) { cancel(bot); return false; }
-            mem.flightGoal = s.observed.add(s.velocity.scale(8));
+            double distance = SkillUtil.horizontalDistance(bot.position(), predicted);
+            if (distance < s.closest - 0.5) { s.closest = distance; s.progressAt = now; }
+            // A missed opportunity is one failed pass, never an orbit around the same centre.
+            if (bot.position().subtract(predicted).dot(s.passDirection) > 8) return finishC4(bot, s, "MISSED_PASS");
+            if (now - s.started > 120 || now - s.progressAt > 40) return finishC4(bot, s, "NO_PROGRESS");
+            mem.flightGoal = predicted.add(s.velocity.scale(8)).add(s.passDirection.scale(40));
             skills.pilot().tick(bot, mem, enemy, now);
             if (mem.flight == BotMemory.Flight.NONE) { cancel(bot); return false; }
-            double height = bot.getEyeY() - s.observed.y;
-            if (bot.isGliding() && height >= 2 && height <= 13 && SkillUtil.horizontalDistance(bot.position(), s.observed) < 6
-                    && now - s.seen < 3 && safeBlast(bot, s.observed, ordnance.chargeRadius(), target, true)) {
+            double height = bot.getEyeY() - predicted.y;
+            if (bot.isGliding() && height >= 2 && height <= 14 && distance < 12 && now - s.seen <= 30) {
+                if (!safeBlast(bot, predicted, ordnance.chargeRadius(), target, true)) return finishC4(bot, s, "UNSAFE_PASS");
                 ItemStack stack = item(bot, "c4_bomb");
                 if (bot.getCooldowns().isOnCooldown(stack.getItem())) return true;
-                // Native C4 throws at 0.5 blocks/tick and ignores the thrower's flight velocity.
-                double fall = Math.min(20, Math.sqrt(Math.max(0, 2 * height / 0.05)));
-                Vec3 aim = s.observed.add(s.velocity.scale(fall));
-                bot.faceLocation(aim);
+                C4Throw aim = c4Throw(bot, s, now, ordnance.chargeRadius());
+                if (aim == null) return true;
+                if (!safeBlast(bot, aim.impact(), ordnance.chargeRadius(), target, true)) return finishC4(bot, s, "UNSAFE_PASS");
+                float flightYaw = bot.getYRot(), flightPitch = bot.getXRot();
                 Set<UUID> before = new HashSet<>(); ordnance.charges(bot).forEach(c -> before.add(c.getUUID()));
                 try (Hand hand = Hand.take(bot, stack)) {
                     if (hand == null) { cancel(bot); return false; }
+                    bot.setLook(aim.yaw(), aim.pitch());
                     CustomData.update(DataComponents.CUSTOM_DATA, stack, tag -> tag.putBoolean("Control", true));
                     stack.getItem().use(bot.level(), bot, InteractionHand.MAIN_HAND);
+                } finally {
+                    // Throw aim is temporary; the next physics tick keeps the existing flight heading.
+                    bot.setLook(flightYaw, flightPitch);
                 }
                 Entity charge = ordnance.charges(bot).stream().filter(c -> !before.contains(c.getUUID())).findFirst().orElse(null);
                 if (charge != null) {
-                    s.charge = charge.getUUID(); s.mode = Mode.C4_EGRESS;
-                    Vec3 away = bot.position().subtract(s.observed).multiply(1, 0, 1);
-                    if (away.lengthSqr() < 1) away = bot.getVelocity().multiply(1, 0, 1);
-                    if (away.lengthSqr() < 1) away = new Vec3(1, 0, 0);
-                    // Continue the pass in the direction of flight; a reverse turn above the bomb is unsafe.
+                    s.charge = charge.getUUID(); s.mode = Mode.C4_EGRESS; s.placedAt = now; s.c4Result = "PLACED";
                     Vec3 travel = bot.getVelocity().multiply(1, 0, 1).normalize();
-                    if (travel.lengthSqr() > 0.1) away = travel;
-                    mem.flightGoal = MovementBounds.clamp(bot, s.observed.add(away.normalize().scale(ordnance.chargeRadius() * 2 + 30)), 8);
+                    if (travel.lengthSqr() > 0.1) s.passDirection = travel;
                 }
             }
         } else {
             Entity charge = s.charge == null ? null : bot.getBotLevel().getEntity(s.charge);
             if (charge == null || !has(bot, "detonator")) { cancel(bot); return false; }
+            if (now - s.placedAt > 100) return finishC4(bot, s, "EGRESS_TIMEOUT");
+            // Keep the exit ahead while checking all charges. A blocked detonation never makes us circle.
+            Vec3 exit = bot.position().add(s.passDirection.scale(ordnance.chargeRadius() * 2 + 30));
+            mem.flightGoal = MovementBounds.clamp(bot, new Vec3(exit.x, s.observed.y, exit.z), 8);
             if (mem.flight != BotMemory.Flight.NONE) skills.pilot().tick(bot, mem, null, now);
             List<Entity> all = ordnance.charges(bot);
             boolean nearEnemy = target != null && target.isAlive() && (now - s.seen < 100)
-                    && charge.position().distanceTo(s.observed) < ordnance.chargeRadius() * 1.4;
+                    && charge.position().distanceTo(predicted) < ordnance.chargeRadius() * 1.4;
             boolean safe = !all.isEmpty() && all.stream().allMatch(c -> safeBlast(bot, c.position(), ordnance.chargeRadius(), target, false));
-            if (nearEnemy && safe && now - s.started >= 30) {
+            if (nearEnemy && safe && now - s.placedAt >= 8) {
                 ItemStack detonator = item(bot, "detonator");
                 if (!bot.getCooldowns().isOnCooldown(detonator.getItem())) {
                     try (Hand hand = Hand.take(bot, detonator)) {
                         if (hand == null) { cancel(bot); return false; }
                         detonator.getItem().use(bot.level(), bot, InteractionHand.MAIN_HAND); s.detonations++;
                     }
-                    cancel(bot); return true;
+                    finishC4(bot, s, "DETONATED"); return true;
                 }
             }
             if (!bot.isGliding() && mem.flight == BotMemory.Flight.NONE) { cancel(bot); return false; }
         }
         return true;
+    }
+    private boolean finishC4(Bot bot, State s, String reason) {
+        s.c4Result = reason; cancel(bot); return false;
+    }
+    private record C4Throw(float yaw, float pitch, Vec3 impact) {}
+    @Nullable private static C4Throw c4Throw(Bot bot, State s, long now, double radius) {
+        // Match the native spawn offset, 0.5 throw speed, float drag and move-then-gravity order.
+        int age = (int) Math.min(25, now - s.seen);
+        Vec3 lead = s.observed.add(s.velocity.scale(Math.min(25, age + 12)));
+        float yaw = SkillUtil.yawTo(bot.position(), lead);
+        C4Throw best = null; double bestScore = Double.MAX_VALUE;
+        for (float pitch : new float[]{25, 40, 55, 70, 85}) {
+            double yr = Math.toRadians(yaw), pr = Math.toRadians(pitch);
+            Vec3 direction = new Vec3(-Math.sin(yr) * Math.cos(pr), -Math.sin(pr), Math.cos(yr) * Math.cos(pr));
+            Vec3 p = bot.getEyePosition().add(0, -0.2F, 0).add(direction.scale(0.25)), v = direction.scale(0.5);
+            for (int tick = 1; tick <= 30; tick++) {
+                Vec3 end = p.add(v);
+                if (!MovementBounds.contains(bot, end, 2) || end.y < bot.level().getMinBuildHeight()
+                        || end.y >= bot.level().getMaxBuildHeight() || !bot.getBotLevel().hasChunkAt(BlockPos.containing(p))
+                        || !bot.getBotLevel().hasChunkAt(BlockPos.containing(end))) break;
+                var ground = bot.getBotLevel().clip(new ClipContext(p, end, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, bot));
+                Vec3 motion = s.velocity.scale(Math.min(25, age + tick));
+                var vehicle = s.targetBounds.inflate(0.2).move(motion).clip(p, end);
+                boolean hitsVehicle = vehicle.isPresent() && (ground.getType() == HitResult.Type.MISS
+                        || vehicle.get().distanceToSqr(p) <= ground.getLocation().distanceToSqr(p));
+                if (hitsVehicle || ground.getType() != HitResult.Type.MISS) {
+                    Vec3 impact = hitsVehicle ? vehicle.get() : ground.getLocation();
+                    double error = hitsVehicle ? 0 : SkillUtil.horizontalDistance(impact, s.observed.add(motion));
+                    double score = error + tick * 0.02;
+                    if (error <= Math.min(4, radius * 0.35) && score < bestScore) {
+                        best = new C4Throw(yaw, pitch, impact); bestScore = score;
+                    }
+                    break;
+                }
+                p = end; v = v.scale((double) 0.99F).add(0, -0.05, 0);
+            }
+        }
+        return best;
     }
     private static boolean line(Bot bot, Vec3 from, Vec3 to) {
         double distance = from.distanceTo(to);

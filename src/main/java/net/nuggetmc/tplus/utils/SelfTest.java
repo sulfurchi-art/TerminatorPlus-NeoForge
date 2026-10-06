@@ -994,6 +994,7 @@ public final class SelfTest {
         list.addAll(warfareCooldownScenarios(y));
         list.addAll(warfareFlightFeedbackScenarios(y));
         list.addAll(warfareOrdnanceScenarios(y));
+        list.addAll(warfareC4PassScenarios(y));
         list.addAll(warfareNavigationScenarios(y));
         list.addAll(warfareGroundScenarios(y));
         list.addAll(warfareMissileScenarios(y));
@@ -1418,6 +1419,89 @@ public final class SelfTest {
                     .getConstructor(LivingEntity.class, net.minecraft.world.level.Level.class, boolean.class).newInstance(owner, level, true);
             e.setPos(x, y + 1, z); level.addFreshEntity(e); spawned.add(e); return e;
         } catch (ReflectiveOperationException e) { throw new IllegalStateException(e); }
+    }
+    private List<Scenario> warfareC4PassScenarios(int y) {
+        List<Scenario> list = new ArrayList<>(); var skills = legacy().getSkills(); var tactics = skills.ordnance(); var warfare = skills.warfare();
+        for (int index = 0; index < 3; index++) {
+            int trial = index, difficulty = index == 1 ? 10 : 9;
+            double x = 23220.5 + index * 300, distance = index == 0 ? 18 : index == 1 ? 68 : 40;
+            Bot[] attacker = {null}; Entity[] tank = {null}; LivingEntity[] friend = {null};
+            long[] began = {-1}, placed = {-1}, ended = {-1}; float[] health = {0}, lastYaw = {0};
+            double[] turn = {0}; boolean[] alive = {true};
+            String name = index == 2 ? "warfare C4 pass ally blocks the drop and one low pass exits promptly without circling"
+                    : "warfare C4 pass level " + difficulty + " at " + (int) distance + " blocks places one charge and safely detonates promptly";
+            list.add(new Scenario(name, () -> {
+                warfareFlatArena((int) x - 20, -35, (int) x + 190, 35, y); run("bot settings setgoal none");
+                attacker[0] = ordnanceBot("C4Pass" + trial, difficulty, x, y, 0.5);
+                attacker[0].profileAbilities().put("drones", false); attacker[0].profileAbilities().put("c4", true); attacker[0].profileAbilities().put("elytra", true);
+                attacker[0].giveItem(new ItemStack(Items.ELYTRA)); attacker[0].giveItem(new ItemStack(Items.FIREWORK_ROCKET, 16));
+                attacker[0].giveItem(warfareItem("c4_bomb", 2)); attacker[0].giveItem(warfareItem("detonator", 1));
+                tank[0] = spawnVehicle("m_1a_2", x + distance, y, 0.5, 0); health[0] = vehicleHealth(tank[0]);
+                spawnHusk(x + distance, y, 0.5, 1000, true).startRiding(tank[0], true);
+                if (trial == 2) {
+                    friend[0] = spawnHusk(x + distance, y, 3.5, 1000, true);
+                    PlayerTeam team = testTeam("c4_pass_safe", attacker[0]); server.getScoreboard().addPlayerToTeam(friend[0].getScoreboardName(), team);
+                }
+                scheduler.runTaskLater(() -> { attacker[0].setLook(-90, 0); run("bot settings setgoal nearesthostile"); }, 70);
+                track(() -> {
+                    Bot b = attacker[0]; long age = b.getAliveTicks();
+                    boolean active = skills.memory(b).getFlightPlan() == net.nuggetmc.tplus.api.agent.legacyagent.skill.BotMemory.FlightPlan.C4;
+                    if (active && began[0] < 0) { began[0] = age; lastYaw[0] = b.getYRot(); }
+                    if (active) { turn[0] += Math.abs(net.minecraft.util.Mth.wrapDegrees(b.getYRot() - lastYaw[0])); lastYaw[0] = b.getYRot(); }
+                    if (began[0] >= 0 && !active && ended[0] < 0) {
+                        ended[0] = age;
+                        LOGGER.info("[SelfTest] C4 mission result trial={} elapsed={} throwDelay={} yawTravel={} state={}", trial, ended[0] - began[0], placed[0] < 0 ? -1 : placed[0] - began[0], turn[0], warfare.describe(b));
+                    }
+                    var charges = warfare.access().ordnance().charges(b);
+                    if (!charges.isEmpty() && placed[0] < 0) placed[0] = age;
+                    charges.forEach(c -> { if (!spawned.contains(c)) spawned.add(c); });
+                    alive[0] &= b.isAlive() && b.getHealth() >= 19.9;
+                    if (age % 30 == 0) LOGGER.info("[SelfTest] C4 single pass trial={} pos={} start={} drop={} end={} yawTravel={} nativeHealth={} charges={} state={}", trial, b.position(), began[0], placed[0], ended[0], turn[0], vehicleHealth(tank[0]), charges.stream().map(Entity::position).toList(), warfare.describe(b));
+                });
+            }, () -> {
+                if (began[0] < 0 || ended[0] < 0 || !alive[0] || turn[0] >= 90) return false;
+                if (trial == 2) return ended[0] - began[0] <= 120 && placed[0] < 0 && friend[0].isAlive()
+                        && vehicleHealth(tank[0]) == health[0] && attacker[0].countItem(warfareItem("c4_bomb", 1).getItem()) == 2
+                        && tactics.detonations(attacker[0]) == 0;
+                return placed[0] >= began[0] && placed[0] - began[0] <= 100 && ended[0] - began[0] <= 160
+                        && tactics.detonations(attacker[0]) == 1 && vehicleHealth(tank[0]) < health[0]
+                        && warfare.access().ordnance().charges(attacker[0]).isEmpty()
+                        && (difficulty == 10 || attacker[0].countItem(warfareItem("c4_bomb", 1).getItem()) == 1);
+            }, 250, true));
+        }
+        Bot[] blocked = {null}; Entity[] blockedTank = {null}, extra = {null}; LivingEntity[] ally = {null};
+        long[] firstCharge = {-1}, ended = {-1}; float[] lastYaw = {0}; double[] turn = {0}; boolean[] healthy = {true};
+        list.add(new Scenario("warfare C4 pass permanent unsafe owned charge exits forward without detonating or circling", () -> {
+            warfareFlatArena(24100, -35, 24450, 35, y); run("bot settings setgoal none");
+            blocked[0] = ordnanceBot("C4BlockedExit", 9, 24120.5, y, 0.5);
+            blocked[0].profileAbilities().put("drones", false); blocked[0].profileAbilities().put("c4", true); blocked[0].profileAbilities().put("elytra", true);
+            blocked[0].giveItem(new ItemStack(Items.ELYTRA)); blocked[0].giveItem(new ItemStack(Items.FIREWORK_ROCKET, 16));
+            blocked[0].giveItem(warfareItem("c4_bomb", 2)); blocked[0].giveItem(warfareItem("detonator", 1));
+            blockedTank[0] = spawnVehicle("m_1a_2", 24160.5, y, 0.5, 0); spawnHusk(24160.5, y, 0.5, 1000, true).startRiding(blockedTank[0], true);
+            ally[0] = spawnHusk(24120.5, y, 3.5, 1000, true); PlayerTeam team = testTeam("c4_blocked_exit", blocked[0]);
+            server.getScoreboard().addPlayerToTeam(ally[0].getScoreboardName(), team);
+            scheduler.runTaskLater(() -> { blocked[0].setLook(-90, 0); run("bot settings setgoal nearesthostile"); }, 70);
+            track(() -> {
+                var charges = warfare.access().ordnance().charges(blocked[0]);
+                charges.forEach(c -> { if (!spawned.contains(c)) spawned.add(c); });
+                if (!charges.isEmpty() && firstCharge[0] < 0) {
+                    firstCharge[0] = blocked[0].getAliveTicks(); lastYaw[0] = blocked[0].getYRot();
+                    extra[0] = ownedC4Fixture(blocked[0], 24120.5, y, 3.5);
+                }
+                if (firstCharge[0] >= 0 && ended[0] < 0) {
+                    turn[0] += Math.abs(net.minecraft.util.Mth.wrapDegrees(blocked[0].getYRot() - lastYaw[0])); lastYaw[0] = blocked[0].getYRot();
+                    if (skills.memory(blocked[0]).getFlightPlan() != net.nuggetmc.tplus.api.agent.legacyagent.skill.BotMemory.FlightPlan.C4) {
+                        ended[0] = blocked[0].getAliveTicks();
+                        LOGGER.info("[SelfTest] C4 blocked exit elapsed={} yawTravel={} position={} state={}", ended[0] - firstCharge[0], turn[0], blocked[0].position(), warfare.describe(blocked[0]));
+                    }
+                }
+                healthy[0] &= blocked[0].isAlive() && blocked[0].getHealth() >= 19.9 && ally[0].isAlive();
+            });
+        }, () -> firstCharge[0] >= 0 && ended[0] >= 0 && ended[0] - firstCharge[0] <= 105 && turn[0] < 90 && healthy[0]
+                && blocked[0].getX() > 24190 && tactics.detonations(blocked[0]) == 0 && vehicleHealth(blockedTank[0]) == 500
+                && blocked[0].countItem(warfareItem("c4_bomb", 1).getItem()) == 1 && extra[0] != null && !extra[0].isRemoved()
+                && warfare.access().ordnance().charges(blocked[0]).size() == 2, 260, true));
+        return list;
     }
     private List<Scenario> warfareOrdnanceScenarios(int y) {
         List<Scenario> list = new ArrayList<>(); var skills = legacy().getSkills(); var tactics = skills.ordnance(); var warfare = skills.warfare();

@@ -113,7 +113,7 @@ class ElytraPilot {
         Vec3 pos = bot.getLocation();
         Vec3 goal = mem.flightGoal != null ? mem.flightGoal : target == null ? null : target.position();
         float yaw = goal != null ? SkillUtil.yawTo(pos, goal) : bot.getEntity().getYRot();
-        bot.setLook(yaw, -50);
+        bot.setLook(yaw, mem.plan == BotMemory.FlightPlan.C4 ? -25 : -50);
         bot.stand();
 
         if (mem.flightTicks == 1) {
