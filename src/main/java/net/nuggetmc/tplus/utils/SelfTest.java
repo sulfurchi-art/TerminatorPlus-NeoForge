@@ -997,6 +997,7 @@ public final class SelfTest {
         list.addAll(warfareC4PassScenarios(y));
         list.addAll(warfareNavigationScenarios(y));
         list.addAll(warfareGroundScenarios(y));
+        list.addAll(warfareCloseRoadScenarios(y));
         list.addAll(warfareMissileScenarios(y));
         return list;
     }
@@ -1222,7 +1223,7 @@ public final class SelfTest {
             crew.board(anchor[0], armor[0], 0); crew.board(flank[0], armor[1], 0);
             spawnHusk(15740.5, y, 0.5, 10000, true).startRiding(armor[2], true); owners[0] = captureNativeOwners(List.of(anchor[0], flank[0]));
             track(() -> { cooperation[0] |= war.describe(anchor[0]).contains("TEAM_FLANK") || war.describe(flank[0]).contains("TEAM_FLANK");
-                if (anchor[0].getAliveTicks() % 100 == 0) LOGGER.info("[SelfTest] Armor fight one={} two={} targetHealth={} owners={}", war.describe(anchor[0]), war.describe(flank[0]), vehicleHealth(armor[2]), owners[0]); });
+                if (anchor[0].getAliveTicks() % 100 == 0) LOGGER.info("[SelfTest] Armor fight pos={},{} one={} two={} targetHealth={} owners={}", armor[0].position(), armor[1].position(), war.describe(anchor[0]), war.describe(flank[0]), vehicleHealth(armor[2]), owners[0]); });
         }, () -> cooperation[0] && owners[0].contains(anchor[0].getUUID()) && owners[0].contains(flank[0].getUUID()) && vehicleHealth(armor[2]) < 500
                 && vehicleHealth(armor[0]) > 0 && vehicleHealth(armor[1]) > 0 && Math.abs(armor[0].getZ() - armor[1].getZ()) > 15, 900, true));
         Bot[] pilot = {null}; Entity[] aircraft = {null}; double[] heightAtWall = {0}; boolean[] flyingSafe = {true}, avoiding = {false};
@@ -1405,6 +1406,136 @@ public final class SelfTest {
         return list;
     }
 
+    private List<Scenario> warfareCloseRoadScenarios(int y) {
+        List<Scenario> list = new ArrayList<>(); var war = legacy().getSkills().warfare(); var crew = war.crew();
+        for (int trial = 0; trial < 3; trial++) {
+            int index = trial; String model = trial == 2 ? "lav_ad" : "m_1a_2";
+            double x = 24520.5 + trial * 300, distance = trial == 1 ? 28 : 14;
+            Bot[] driver = {null}; Entity[] own = {null}, target = {null}; long[] boarded = {-1}, moved = {-1};
+            double[] travel = {0}; boolean[] intact = {true};
+            list.add(new Scenario("warfare close road " + model + " at " + (int) distance + " blocks starts native combat movement without a street U turn", () -> {
+                warfareFlatArena((int) x - 80, -10, (int) x + 90, 10, y); run("bot settings setgoal nearesthostile");
+                for (int bx = (int) x - 70; bx <= x + 80; bx++) for (int h = 0; h < 4; h++) {
+                    setBlock(bx, y + h, -4, Blocks.BEDROCK.defaultBlockState()); setBlock(bx, y + h, 4, Blocks.BEDROCK.defaultBlockState());
+                }
+                driver[0] = vehicleBot("CloseRoad" + index, 10, x - 2, y, 0.5); driver[0].profileAbilities().put("vehicleweapons", false);
+                own[0] = spawnVehicle(model, x, y, 0.5, -90); target[0] = spawnVehicle("m_1a_2", x + distance, y, 0.5, 90);
+                spawnHusk(x + distance, y, 0.5, 1000, true).startRiding(target[0], true); crew.board(driver[0], own[0], 0);
+                track(() -> {
+                    if (driver[0].getVehicle() == own[0] && boarded[0] < 0) boarded[0] = driver[0].getAliveTicks();
+                    travel[0] = Math.max(travel[0], own[0].position().subtract(new Vec3(x, y, 0.5)).horizontalDistance());
+                    if (travel[0] > 0.5 && moved[0] < 0) moved[0] = driver[0].getAliveTicks();
+                    intact[0] &= vehicleHealth(own[0]) >= (index == 2 ? 290 : 490) && vehicleHealth(target[0]) >= 490
+                            && own[0].getZ() > -1 && own[0].getZ() < 2 && Math.abs(net.minecraft.util.Mth.wrapDegrees(own[0].getYRot() + 90)) < 20;
+                    if (driver[0].getAliveTicks() % 40 == 0) LOGGER.info("[SelfTest] Close road model={} distance={} pos={} boarded={} moved={} travel={} nativeHealth={},{} state={}", model, distance, own[0].position(), boarded[0], moved[0], travel[0], vehicleHealth(own[0]), vehicleHealth(target[0]), war.describe(driver[0]));
+                });
+            }, () -> boarded[0] >= 0 && moved[0] >= boarded[0] && moved[0] - boarded[0] <= 40 && travel[0] > 6
+                    && intact[0] && driver[0].getVehicle() == own[0], 200, true));
+        }
+        for (int order = 0; order < 2; order++) {
+            int direction = order;
+            Bot[] east = {null}, west = {null}; Entity[] pair = new Entity[2]; long[] started = {-1}, firstMove = {-1};
+            boolean[] intact = {true}, backing = {false};
+            list.add(new Scenario("warfare close road allied head on vehicles reverse to a passing area and both continue order " + direction, () -> {
+                warfareFlatArena(25350, -45, 25520, 45, y); run("bot settings setgoal none");
+                for (int bx = 25405; bx <= 25450; bx++) for (int h = 0; h < 4; h++) {
+                    setBlock(bx, y + h, -4, Blocks.BEDROCK.defaultBlockState()); setBlock(bx, y + h, 4, Blocks.BEDROCK.defaultBlockState());
+                }
+                east[0] = vehicleBot("CloseRoadEast", 10, 25418.5, y, 0.5); west[0] = vehicleBot("CloseRoadWest", 10, 25436.5, y, 0.5);
+                testTeam("close_road_friends", east[0], west[0]);
+                pair[0] = spawnVehicle("m_1a_2", 25420.5, y, 0.5, -90, new java.util.UUID(0x4210L, direction == 0 ? 2 : 1));
+                pair[1] = spawnVehicle("m_1a_2", 25434.5, y, 0.5, 90, new java.util.UUID(0x4210L, direction == 0 ? 1 : 2));
+                crew.board(east[0], pair[0], 0); crew.board(west[0], pair[1], 0);
+                crew.go(east[0], new Vec3(25480.5, y, 0.5)); crew.go(west[0], new Vec3(25375.5, y, 0.5));
+                track(() -> {
+                    if (east[0].getVehicle() == pair[0] && west[0].getVehicle() == pair[1] && started[0] < 0) started[0] = east[0].getAliveTicks();
+                    if (firstMove[0] < 0 && (pair[0].position().subtract(new Vec3(25420.5, y, 0.5)).horizontalDistance() > 0.5
+                            || pair[1].position().subtract(new Vec3(25434.5, y, 0.5)).horizontalDistance() > 0.5)) firstMove[0] = east[0].getAliveTicks();
+                    intact[0] &= vehicleHealth(pair[0]) >= 490 && vehicleHealth(pair[1]) >= 490;
+                    backing[0] |= war.describe(east[0]).contains("PASS_TEAM_REVERSE") || war.describe(west[0]).contains("PASS_TEAM_REVERSE");
+                    if (east[0].getAliveTicks() % 100 == 0) LOGGER.info("[SelfTest] Close allied east={} west={} yaw={},{} start={} move={} nativeHealth={},{} state={},{}", pair[0].position(), pair[1].position(), pair[0].getYRot(), pair[1].getYRot(), started[0], firstMove[0], vehicleHealth(pair[0]), vehicleHealth(pair[1]), war.describe(east[0]), war.describe(west[0]));
+                });
+            }, () -> started[0] >= 0 && firstMove[0] >= started[0] && firstMove[0] - started[0] <= 40 && backing[0] && intact[0]
+                    && pair[0].getX() > 25440 && pair[1].getX() < 25415 && east[0].getVehicle() == pair[0] && west[0].getVehicle() == pair[1], 800, true));
+        }
+        Bot[] boxed = {null}; Entity[] blocked = new Entity[3]; boolean[] safe = {true}; double[] motion = {0};
+        list.add(new Scenario("warfare close road rear ally blocks unsafe reversing without native collision damage", () -> {
+            warfareFlatArena(25640, -10, 25810, 10, y); run("bot settings setgoal nearesthostile");
+            for (int bx = 25650; bx <= 25800; bx++) for (int h = 0; h < 4; h++) {
+                setBlock(bx, y + h, -4, Blocks.BEDROCK.defaultBlockState()); setBlock(bx, y + h, 4, Blocks.BEDROCK.defaultBlockState());
+            }
+            boxed[0] = vehicleBot("CloseRoadBoxed", 10, 25718.5, y, 0.5); boxed[0].profileAbilities().put("vehicleweapons", false);
+            blocked[0] = spawnVehicle("m_1a_2", 25720.5, y, 0.5, -90); blocked[1] = spawnVehicle("m_1a_2", 25734.5, y, 0.5, 90);
+            blocked[2] = spawnVehicle("m_1a_2", 25706.5, y, 0.5, -90);
+            spawnHusk(25734.5, y, 0.5, 1000, true).startRiding(blocked[1], true);
+            Husk ally = spawnHusk(25706.5, y, 0.5, 1000, true); ally.startRiding(blocked[2], true);
+            PlayerTeam team = testTeam("close_boxed_ally", boxed[0]); server.getScoreboard().addPlayerToTeam(ally.getScoreboardName(), team);
+            crew.board(boxed[0], blocked[0], 0);
+            track(() -> {
+                motion[0] = Math.max(motion[0], blocked[0].position().subtract(new Vec3(25720.5, y, 0.5)).horizontalDistance());
+                safe[0] &= vehicleHealth(blocked[0]) >= 490 && vehicleHealth(blocked[1]) >= 490 && vehicleHealth(blocked[2]) >= 490;
+            });
+        }, () -> boxed[0].getAliveTicks() >= 130 && boxed[0].getVehicle() == blocked[0] && motion[0] < 1 && safe[0], 180, true));
+        Bot[] gunner = {null}; Entity[] duel = new Entity[2]; long[] firingMove = {-1}; boolean[] firingSafe = {true};
+        java.util.Set<java.util.UUID>[] firingOwners = new java.util.Set[]{null}; double[] firingTravel = {0};
+        list.add(new Scenario("warfare close road reversing tank keeps its native cannon firing and damages hostile armor", () -> {
+            warfareFlatArena(25940, -10, 26110, 10, y); run("bot settings setgoal nearesthostile");
+            for (int bx = 25950; bx <= 26100; bx++) for (int h = 0; h < 4; h++) {
+                setBlock(bx, y + h, -4, Blocks.BEDROCK.defaultBlockState()); setBlock(bx, y + h, 4, Blocks.BEDROCK.defaultBlockState());
+            }
+            gunner[0] = vehicleBot("CloseRoadFire", 10, 26018.5, y, 0.5);
+            duel[0] = spawnVehicle("m_1a_2", 26020.5, y, 0.5, -90); duel[1] = spawnVehicle("m_1a_2", 26034.5, y, 0.5, 90);
+            spawnHusk(26034.5, y, 0.5, 1000, true).startRiding(duel[1], true); crew.board(gunner[0], duel[0], 0);
+            firingOwners[0] = captureNativeOwners(List.of(gunner[0]));
+            track(() -> {
+                firingTravel[0] = Math.max(firingTravel[0], 26020.5 - duel[0].getX());
+                if (firingTravel[0] > 0.5 && firingMove[0] < 0) firingMove[0] = gunner[0].getAliveTicks();
+                firingSafe[0] &= vehicleHealth(duel[0]) >= 490 && duel[0].getZ() > -1 && duel[0].getZ() < 2;
+                if (gunner[0].getAliveTicks() % 80 == 0) LOGGER.info("[SelfTest] Close road fire pos={} move={} travel={} health={},{} owners={} state={}", duel[0].position(), firingMove[0], firingTravel[0], vehicleHealth(duel[0]), vehicleHealth(duel[1]), firingOwners[0], war.describe(gunner[0]));
+            });
+        }, () -> firingMove[0] >= 0 && firingMove[0] <= 40 && firingTravel[0] > 6 && firingSafe[0]
+                && firingOwners[0].contains(gunner[0].getUUID()) && vehicleHealth(duel[1]) < 490 && gunner[0].getVehicle() == duel[0], 400, true));
+        Bot[] active = {null}; Entity[] repeated = new Entity[2]; double[] previous = {0}, forwardTravel = {0}, rearTravel = {0};
+        boolean[] activeSafe = {true};
+        list.add(new Scenario("warfare close road sustained attack makes repeated native forward and rear combat legs", () -> {
+            warfareFlatArena(26240, -10, 26410, 10, y); run("bot settings setgoal nearesthostile");
+            for (int bx = 26250; bx <= 26400; bx++) for (int h = 0; h < 4; h++) {
+                setBlock(bx, y + h, -4, Blocks.BEDROCK.defaultBlockState()); setBlock(bx, y + h, 4, Blocks.BEDROCK.defaultBlockState());
+            }
+            active[0] = vehicleBot("CloseRoadActive", 10, 26318.5, y, 0.5); active[0].profileAbilities().put("vehicleweapons", false);
+            repeated[0] = spawnVehicle("m_1a_2", 26320.5, y, 0.5, -90); repeated[1] = spawnVehicle("m_1a_2", 26348.5, y, 0.5, 90);
+            spawnHusk(26348.5, y, 0.5, 1000, true).startRiding(repeated[1], true); crew.board(active[0], repeated[0], 0); previous[0] = repeated[0].getX();
+            track(() -> {
+                double step = repeated[0].getX() - previous[0]; previous[0] = repeated[0].getX();
+                if (step > 0) forwardTravel[0] += step; else rearTravel[0] -= step;
+                activeSafe[0] &= vehicleHealth(repeated[0]) >= 490 && vehicleHealth(repeated[1]) >= 490 && repeated[0].getZ() > -1 && repeated[0].getZ() < 2;
+                if (active[0].getAliveTicks() % 100 == 0) LOGGER.info("[SelfTest] Close road sustained pos={} forward={} rear={} health={},{} state={}", repeated[0].position(), forwardTravel[0], rearTravel[0], vehicleHealth(repeated[0]), vehicleHealth(repeated[1]), war.describe(active[0]));
+            });
+        }, () -> active[0].getAliveTicks() >= 260 && forwardTravel[0] > 8 && rearTravel[0] > 12 && activeSafe[0] && active[0].getVehicle() == repeated[0], 600, true));
+        for (int order = 0; order < 2; order++) {
+            int priority = order; Bot[] left = {null}, right = {null}; Entity[] group = new Entity[3];
+            java.util.Set<java.util.UUID>[] shellOwners = new java.util.Set[]{null}; boolean[] separated = {true}, flanking = {false};
+            list.add(new Scenario("warfare close road allied open armor keeps its existing flank side and damages enemy in order " + priority, () -> {
+                warfareFlatArena(26550, -80, 26800, 80, y); run("bot settings setgoal nearesthostile");
+                left[0] = vehicleBot("RoadFlankLeft", 10, 26618.5, y, -8.5); right[0] = vehicleBot("RoadFlankRight", 10, 26618.5, y, 10.5);
+                testTeam("close_flank_order", left[0], right[0]);
+                left[0].profileAbilities().put("teamwork", true); right[0].profileAbilities().put("teamwork", true);
+                group[0] = spawnVehicle("m_1a_2", 26620.5, y, -10.5, -90, new java.util.UUID(0x4211L, priority == 0 ? 1 : 2));
+                group[1] = spawnVehicle("m_1a_2", 26620.5, y, 10.5, -90, new java.util.UUID(0x4211L, priority == 0 ? 2 : 1));
+                group[2] = spawnVehicle("m_1a_2", 26680.5, y, 0.5, 90);
+                crew.board(left[0], group[0], 0); crew.board(right[0], group[1], 0);
+                spawnHusk(26680.5, y, 0.5, 1000, true).startRiding(group[2], true); shellOwners[0] = captureNativeOwners(List.of(left[0], right[0]));
+                track(() -> {
+                    separated[0] &= group[0].getZ() < 0.5 && group[1].getZ() > 0.5 && vehicleHealth(group[0]) >= 490 && vehicleHealth(group[1]) >= 490;
+                    flanking[0] |= war.describe(left[0]).contains("TEAM_FLANK") || war.describe(right[0]).contains("TEAM_FLANK");
+                    if (left[0].getAliveTicks() % 80 == 0) LOGGER.info("[SelfTest] Flank order={} pos={},{} health={},{},{} separated={} owners={} state={},{}", priority, group[0].position(), group[1].position(), vehicleHealth(group[0]), vehicleHealth(group[1]), vehicleHealth(group[2]), separated[0], shellOwners[0], war.describe(left[0]), war.describe(right[0]));
+                });
+            }, () -> separated[0] && flanking[0] && Math.abs(group[0].getZ() - group[1].getZ()) > 15
+                    && shellOwners[0].contains(left[0].getUUID()) && shellOwners[0].contains(right[0].getUUID()) && vehicleHealth(group[2]) < 490
+                    && left[0].getVehicle() == group[0] && right[0].getVehicle() == group[1], 400, true));
+        }
+        return list;
+    }
     private Bot ordnanceBot(String name, int difficulty, double x, int y, double z) {
         Bot bot = infantry(name, difficulty, x, y, z);
         bot.profileAbilities().put("guns", false); bot.profileAbilities().put("drones", true);
@@ -1801,8 +1932,13 @@ public final class SelfTest {
         return list;
     }
     private Entity spawnVehicle(String id, double x, int y, double z, float yaw) {
+        return spawnVehicle(id, x, y, z, yaw, null);
+    }
+    private Entity spawnVehicle(String id, double x, int y, double z, float yaw, @javax.annotation.Nullable java.util.UUID uuid) {
         var type = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.get(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("superbwarfare", id));
-        Entity entity = Objects.requireNonNull(type.create(level)); entity.moveTo(x, y, z, yaw, 0);
+        Entity entity = Objects.requireNonNull(type.create(level));
+        if (uuid != null) entity.setUUID(uuid);
+        entity.moveTo(x, y, z, yaw, 0);
         level.addFreshEntity(entity); spawned.add(entity); legacy().getSkills().warfare().vessel(entity).energy(2000000); return entity;
     }
     private Bot vehicleBot(String name, int difficulty, double x, int y, double z) {

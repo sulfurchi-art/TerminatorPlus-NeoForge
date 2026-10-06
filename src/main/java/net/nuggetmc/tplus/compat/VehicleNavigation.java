@@ -179,6 +179,16 @@ final class VehicleNavigation {
         }
         return true;
     }
+    /** Native horizontal chassis bounds for short dynamic-vehicle avoidance. */
+    static AABB body(Vessel v, Vec3 point, float yaw) {
+        var shape = v.footprint(); double angle = Math.toRadians(yaw);
+        double sine = Math.abs(Math.sin(angle)), cosine = Math.abs(Math.cos(angle));
+        double x = shape.halfSize().x * cosine + shape.halfSize().z * sine;
+        double z = shape.halfSize().x * sine + shape.halfSize().z * cosine;
+        Vec3 center = point.add(shape.center().yRot((float) -angle));
+        return new AABB(center.x - x, center.y - shape.halfSize().y, center.z - z,
+                center.x + x, center.y + shape.halfSize().y, center.z + z);
+    }
     @Nullable static Vec3 site(Vessel v, Vec3 point, float yaw) { return site(v, point, yaw, 0.75); }
     @Nullable private static Vec3 site(Vessel v, Vec3 point, float yaw, double margin) {
         rejection = null;
