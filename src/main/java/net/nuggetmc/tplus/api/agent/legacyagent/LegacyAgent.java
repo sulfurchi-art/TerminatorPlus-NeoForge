@@ -128,7 +128,12 @@ public class LegacyAgent extends Agent {
 
     @Override
     protected void tick() {
+        long perfStart = net.nuggetmc.tplus.utils.PerfProbe.begin();
+        try {
+
         manager.fetch().forEach(this::tickBot);
+    
+        } finally { net.nuggetmc.tplus.utils.PerfProbe.end(net.nuggetmc.tplus.utils.PerfProbe.AI, perfStart); }
     }
 
     @Override
@@ -181,6 +186,7 @@ public class LegacyAgent extends Agent {
         ServerLevel world = bot.getBotLevel();
         Vec3 loc = bot.getLocation();
         LivingEntity livingTarget = locateTarget(bot, loc);
+        boolean reacted = skills.react(bot, livingTarget);
 
         // flying, mace dives, void pearls: these steer the bot on their own while they last
         if (skills.tickActive(bot, livingTarget)) {
@@ -194,6 +200,8 @@ public class LegacyAgent extends Agent {
             stopMining(bot);
             return;
         }
+
+        if (!reacted) { stopMining(bot); return; }
 
         if (skills.tryStart(bot, livingTarget)) {
             stopMining(bot);
@@ -211,6 +219,7 @@ public class LegacyAgent extends Agent {
         }
 
         Vec3 target = offsets ? livingTarget.position().add(bot.getOffset()) : livingTarget.position();
+        target = skills.pursuitPoint(bot, livingTarget, target);
 
         boolean ai = bot.hasNeuralNetwork();
 
@@ -1349,6 +1358,9 @@ public class LegacyAgent extends Agent {
         if ((target instanceof Player player && PlayerUtils.isInvincible(player)) || target.invulnerableTime >= 5 || loc.distanceTo(target.position()) >= 4)
             return;
 
+        if (bot.getEntity().isAlliedTo(target) || !skills.meleeReady(bot)) return;
+        if (skills.hardness(bot).tactical() && bot.getEntity().getEyePosition().distanceTo(
+                target.getBoundingBox().getCenter()) > 3) return;
         bot.attackTarget(target);
     }
 
@@ -1395,6 +1407,10 @@ public class LegacyAgent extends Agent {
      * Living entities in the bot's level, limited to the target range if one is set.
      */
     private Iterable<LivingEntity> livingEntities(ServerLevel world, LivingEntity self) {
+        if (net.nuggetmc.tplus.utils.PerfProbe.enabled && net.nuggetmc.tplus.utils.PerfProbe.mode > 0) {
+            return net.nuggetmc.tplus.utils.PerformanceTest.sharedEntities(world);
+        }
+
         double range = skillSettings.targetRange;
 
         if (range > 0) {
@@ -1418,7 +1434,7 @@ public class LegacyAgent extends Agent {
         ServerPlayer self = bot.getEntity();
         LivingEntity attacker = self.getLastHurtByMob();
 
-        if (attacker == null || attacker == self || !attacker.isAlive() || attacker.level() != world
+        if (attacker == null || attacker == self || self.isAlliedTo(attacker) || !attacker.isAlive() || attacker.level() != world
                 || self.tickCount - self.getLastHurtByMobTimestamp() > 100) {
             return null;
         }
@@ -1437,13 +1453,16 @@ public class LegacyAgent extends Agent {
 
     @Nullable
     private LivingEntity locateTarget(Terminator bot, Vec3 loc, EnumTargetGoal... targetGoal) {
+        long perfStart = net.nuggetmc.tplus.utils.PerfProbe.begin();
+        try {
+
         LivingEntity result = null;
         ServerLevel world = bot.getBotLevel();
 
         EnumTargetGoal g = goal;
         if (targetGoal.length > 0) g = targetGoal[0];
 
-        LivingEntity revenge = g != EnumTargetGoal.NONE && skillSettings.retaliate() ? retaliationTarget(bot, world, loc) : null;
+        LivingEntity revenge = g != EnumTargetGoal.NONE && skills.enabled(bot, "retaliate") ? retaliationTarget(bot, world, loc) : null;
 
         switch (g) {
             default:
@@ -1451,7 +1470,7 @@ public class LegacyAgent extends Agent {
 
             case NEAREST_PLAYER: {
                 for (ServerPlayer player : realPlayers()) {
-                    if (validateCloserEntity(player, world, loc, result)) {
+                    if (!bot.getEntity().isAlliedTo(player) && validateCloserEntity(player, world, loc, result)) {
                         result = player;
                     }
                 }
@@ -1461,7 +1480,7 @@ public class LegacyAgent extends Agent {
 
             case NEAREST_VULNERABLE_PLAYER: {
                 for (ServerPlayer player : realPlayers()) {
-                    if (!PlayerUtils.isInvincible(player) && validateCloserEntity(player, world, loc, result)) {
+                    if (!PlayerUtils.isInvincible(player) && !bot.getEntity().isAlliedTo(player) && validateCloserEntity(player, world, loc, result)) {
                         result = player;
                     }
                 }
@@ -1472,7 +1491,7 @@ public class LegacyAgent extends Agent {
             case NEAREST_HOSTILE: {
                 for (LivingEntity entity : livingEntities(world, bot.getEntity())) {
                     // Enemy also covers hostiles that aren't Monster subclasses: slimes, phantoms, ghasts, shulkers, hoglins...
-                    if ((entity instanceof Enemy || (customListMode == CustomListMode.HOSTILE && CUSTOM_MOB_LIST.contains(entity.getType()))) && validateCloserEntity(entity, world, loc, result)) {
+                    if ((entity instanceof Enemy || (customListMode == CustomListMode.HOSTILE && CUSTOM_MOB_LIST.contains(entity.getType()))) && !bot.getEntity().isAlliedTo(entity) && validateCloserEntity(entity, world, loc, result)) {
                         result = entity;
                     }
                 }
@@ -1483,7 +1502,7 @@ public class LegacyAgent extends Agent {
             case NEAREST_RAIDER: {
                 for (LivingEntity entity : livingEntities(world, bot.getEntity())) {
                     boolean raider = entity instanceof Raider || (entity instanceof Vex vex && vex.getOwner() instanceof Raider);
-                    if ((raider || (customListMode == CustomListMode.RAIDER && CUSTOM_MOB_LIST.contains(entity.getType()))) && validateCloserEntity(entity, world, loc, result)) {
+                    if ((raider || (customListMode == CustomListMode.RAIDER && CUSTOM_MOB_LIST.contains(entity.getType()))) && !bot.getEntity().isAlliedTo(entity) && validateCloserEntity(entity, world, loc, result)) {
                         result = entity;
                     }
                 }
@@ -1493,7 +1512,7 @@ public class LegacyAgent extends Agent {
 
             case NEAREST_MOB: {
                 for (LivingEntity entity : livingEntities(world, bot.getEntity())) {
-                    if ((entity instanceof Mob || (customListMode == CustomListMode.MOB && CUSTOM_MOB_LIST.contains(entity.getType()))) && validateCloserEntity(entity, world, loc, result)) {
+                    if ((entity instanceof Mob || (customListMode == CustomListMode.MOB && CUSTOM_MOB_LIST.contains(entity.getType()))) && !bot.getEntity().isAlliedTo(entity) && validateCloserEntity(entity, world, loc, result)) {
                         result = entity;
                     }
                 }
@@ -1506,7 +1525,7 @@ public class LegacyAgent extends Agent {
                     if (bot != otherBot) {
                         LivingEntity player = otherBot.getEntity();
 
-                        if (validateCloserEntity(player, world, loc, result)) {
+                        if (!bot.getEntity().isAlliedTo(player) && validateCloserEntity(player, world, loc, result)) {
                             result = player;
                         }
                     }
@@ -1522,7 +1541,7 @@ public class LegacyAgent extends Agent {
                     if (bot != otherBot) {
                         LivingEntity player = otherBot.getEntity();
 
-                        if (!name.equals(otherBot.getBotName()) && validateCloserEntity(player, world, loc, result)) {
+                        if (!name.equals(otherBot.getBotName()) && !bot.getEntity().isAlliedTo(player) && validateCloserEntity(player, world, loc, result)) {
                             result = player;
                         }
                     }
@@ -1538,7 +1557,7 @@ public class LegacyAgent extends Agent {
                     if (bot != otherBot) {
                         LivingEntity player = otherBot.getEntity();
 
-                        if (!name.equals(NAME_PATTERN.matcher(otherBot.getBotName()).replaceAll("")) && validateCloserEntity(player, world, loc, result)) {
+                        if (!name.equals(NAME_PATTERN.matcher(otherBot.getBotName()).replaceAll("")) && !bot.getEntity().isAlliedTo(player) && validateCloserEntity(player, world, loc, result)) {
                             result = player;
                         }
                     }
@@ -1549,7 +1568,7 @@ public class LegacyAgent extends Agent {
 
             case CUSTOM_LIST: {
                 for (LivingEntity entity : livingEntities(world, bot.getEntity())) {
-                    if (customListMode == CustomListMode.CUSTOM && CUSTOM_MOB_LIST.contains(entity.getType()) && validateCloserEntity(entity, world, loc, result)) {
+                    if (customListMode == CustomListMode.CUSTOM && CUSTOM_MOB_LIST.contains(entity.getType()) && !bot.getEntity().isAlliedTo(entity) && validateCloserEntity(entity, world, loc, result)) {
                         result = entity;
                     }
                 }
@@ -1560,7 +1579,7 @@ public class LegacyAgent extends Agent {
             case PLAYER: {
                 if (bot.getTargetPlayer() != null) {
                     ServerPlayer player = manager.getServer().getPlayerList().getPlayer(bot.getTargetPlayer());
-                    if (player != null && !(player instanceof Terminator) && validateCloserEntity(player, world, loc, null)) {
+                    if (player != null && !(player instanceof Terminator) && !bot.getEntity().isAlliedTo(player) && validateCloserEntity(player, world, loc, null)) {
                         result = player;
                     }
                 }
@@ -1582,7 +1601,10 @@ public class LegacyAgent extends Agent {
         TerminatorLocateTargetEvent event = new TerminatorLocateTargetEvent(bot, result);
         NeoForge.EVENT_BUS.post(event);
         if (event.isCanceled()) return null;
-        return event.getTarget();
+        LivingEntity chosen = event.getTarget();
+        return chosen != null && bot.getEntity().isAlliedTo(chosen) ? null : chosen;
+    
+        } finally { net.nuggetmc.tplus.utils.PerfProbe.end(net.nuggetmc.tplus.utils.PerfProbe.TARGET, perfStart); }
     }
 
     private boolean validateCloserEntity(LivingEntity entity, ServerLevel world, Vec3 loc, @Nullable LivingEntity result) {

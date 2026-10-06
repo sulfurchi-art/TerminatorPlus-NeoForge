@@ -23,6 +23,7 @@ public class SkillSettings {
      * What bots build pillars, bridges and clutches with ({@code /bot settings buildblock}). Bots never run out of it.
      */
     public Block buildBlock = Blocks.COBBLESTONE;
+    public int hardness = 7;
 
     private final Map<String, Boolean> abilities = new LinkedHashMap<>();
 
@@ -36,6 +37,9 @@ public class SkillSettings {
         abilities.put("bow", true);          // bow and arrows at range
         abilities.put("totems", true);       // a new totem in the off hand as soon as one pops
         abilities.put("retaliate", true);    // fight back against whoever hit the bot
+        abilities.put("recovery", true);
+        abilities.put("teamwork", true);
+        abilities.put("criticals", true);
     }
 
     public Map<String, Boolean> all() {

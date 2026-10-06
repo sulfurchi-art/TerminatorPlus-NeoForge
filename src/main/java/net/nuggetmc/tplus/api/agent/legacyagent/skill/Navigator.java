@@ -53,7 +53,7 @@ class Navigator {
         trackProgress(bot, mem, targetPos, now);
 
         // ladders, vines, scaffolding: climb when the target is above
-        if (skills.settings().climbing() && bot.isClimbing() && targetPos.y > pos.y + 0.5) {
+        if (skills.enabled(bot, "climbing") && bot.isClimbing() && targetPos.y > pos.y + 0.5) {
             climbHere(bot, target);
             return true;
         }
@@ -135,7 +135,7 @@ class Navigator {
     // ---- detours ----------------------------------------------------------------------------------------------------
 
     private boolean startPath(Terminator bot, BotMemory mem, LivingEntity target, long now) {
-        if (!skills.settings().pathfinding() || now < mem.nextPathSearch) return false;
+        if (!skills.enabled(bot, "pathfinding") || now < mem.nextPathSearch) return false;
         mem.nextPathSearch = now + 40;
 
         List<BlockPos> path = skills.pathfinder().find(bot.getBotLevel(), bot.getEntity(), target.blockPosition(), PATH_RANGE);
@@ -232,7 +232,7 @@ class Navigator {
      * target is right above (out of a pit).
      */
     private boolean startTower(Terminator bot, BotMemory mem, LivingEntity target, long now) {
-        if (!skills.settings().climbing() || !bot.isBotOnGround() || bot.isBotInWater()) return false;
+        if (!skills.enabled(bot, "climbing") || !bot.isBotOnGround() || bot.isBotInWater()) return false;
 
         ServerLevel level = bot.getBotLevel();
         ServerPlayer entity = bot.getEntity();
@@ -339,7 +339,7 @@ class Navigator {
      * Walk to a ladder/vine column nearby when the target is higher up.
      */
     private boolean startLadder(Terminator bot, BotMemory mem, LivingEntity target, long now) {
-        if (!skills.settings().climbing() || target.getY() < bot.getLocation().y + 2) return false;
+        if (!skills.enabled(bot, "climbing") || target.getY() < bot.getLocation().y + 2) return false;
 
         ServerLevel level = bot.getBotLevel();
         BlockPos feet = bot.getEntity().blockPosition();

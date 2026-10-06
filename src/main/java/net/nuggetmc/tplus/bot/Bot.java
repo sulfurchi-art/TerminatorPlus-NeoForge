@@ -1,5 +1,12 @@
 package net.nuggetmc.tplus.bot;
 
+import net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent;
+import net.nuggetmc.tplus.api.agent.legacyagent.skill.Hardness;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.item.alchemy.PotionContents;
+import net.minecraft.world.item.SwordItem;
+import net.minecraft.world.item.AxeItem;
 import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.properties.Property;
 import net.minecraft.core.BlockPos;
@@ -110,6 +117,82 @@ public class Bot extends ServerPlayer implements Terminator {
     private boolean gliding;
     private int glideTicks;
     private boolean elytraSwapped;
+    private int hardnessOverride;
+    private int consumableSlot = -1;
+    private int consumableTicks;
+    private ItemStack consumableHand = ItemStack.EMPTY;
+
+    public int getHardnessOverride() { return hardnessOverride; }
+    public void setHardnessOverride(int value) {
+        if (value < 0 || value > 10) throw new IllegalArgumentException("AI hardness must be 1..10, or 0 to inherit");
+        hardnessOverride = value;
+    }
+    public Hardness hardness() {
+        return ((LegacyAgent) agent).getSkills().hardness(this);
+    }
+
+    public boolean isConsuming() { return consumableSlot >= 0; }
+
+    public boolean hasRecoveryItem() {
+        return findSlot(this::usefulRecoveryItem) >= 0;
+    }
+
+    private boolean usefulRecoveryItem(ItemStack stack) {
+        if (stack.is(Items.CHORUS_FRUIT)) return false;
+        if (stack.is(Items.GOLDEN_APPLE) || stack.is(Items.ENCHANTED_GOLDEN_APPLE)) return !hasEffect(MobEffects.REGENERATION);
+        if (stack.getFoodProperties(this) != null) return getFoodData().needsFood();
+        if (stack.is(Items.POTION)) {
+            var contents = stack.getOrDefault(DataComponents.POTION_CONTENTS,
+                    PotionContents.EMPTY);
+            for (var effect : contents.getAllEffects()) {
+                if (effect.getEffect().is(MobEffects.HEAL)
+                        || effect.getEffect().is(MobEffects.REGENERATION)) return true;
+            }
+        }
+        return false;
+    }
+
+    /** Use the real stack for the vanilla duration and effects; never consume the display copy. */
+    public boolean beginRecoveryItem(boolean chorus) {
+        if (isConsuming()) return true;
+        int slot = !chorus ? findSlot(s -> s.is(Items.ENCHANTED_GOLDEN_APPLE) && usefulRecoveryItem(s)) : -1;
+        if (slot < 0 && !chorus) slot = findSlot(s -> s.is(Items.GOLDEN_APPLE) && usefulRecoveryItem(s));
+        if (slot < 0) slot = findSlot(s -> chorus ? s.is(Items.CHORUS_FRUIT) : usefulRecoveryItem(s));
+        if (slot < 0 || getCooldowns().isOnCooldown(getInventory().items.get(slot).getItem())) return false;
+        lowerBow();
+        consumableSlot = slot;
+        consumableHand = getInventory().items.get(HAND_SLOT);
+        getInventory().items.set(HAND_SLOT, getInventory().items.get(slot));
+        getInventory().items.set(slot, ItemStack.EMPTY);
+        startUsingItem(InteractionHand.MAIN_HAND);
+        consumableTicks = getMainHandItem().getUseDuration(this);
+        if (!isUsingItem() || consumableTicks <= 0) { cancelRecoveryItem(); return false; }
+        return true;
+    }
+
+    public void cancelRecoveryItem() {
+        if (!isConsuming()) return;
+        stopUsingItem();
+        getInventory().items.set(consumableSlot, getMainHandItem());
+        getInventory().items.set(HAND_SLOT, consumableHand);
+        consumableSlot = -1;
+        consumableHand = ItemStack.EMPTY;
+    }
+
+    private void tickRecoveryItem() {
+        if (!isConsuming()) return;
+        if (--consumableTicks > 0) return;
+        ItemStack result = getMainHandItem().finishUsingItem(level(), this);
+        getInventory().items.set(HAND_SLOT, result);
+        cancelRecoveryItem();
+    }
+
+    public void prepareEquipmentPreset() {
+        cancelRecoveryItem();
+        stopGliding();
+        elytraSwapped = false;
+        if (rocket != null) { rocket.discard(); rocket = null; }
+    }
     @Nullable
     private FireworkRocketEntity rocket;
 
@@ -301,6 +384,9 @@ public class Bot extends ServerPlayer implements Terminator {
 
     @Override
     public void tick() {
+        long perfStart = net.nuggetmc.tplus.utils.PerfProbe.begin();
+        try {
+
         loadChunks();
 
         super.tick();
@@ -324,6 +410,13 @@ public class Bot extends ServerPlayer implements Terminator {
 
         updateLocation();
 
+        tickRecoveryItem();
+        if (hardness().tactical()) {
+            getFoodData().addExhaustion((float) velocity.horizontalDistance() * 0.01F);
+            getFoodData().tick(this);
+            getCooldowns().tick();
+        }
+
         if (!isAlive()) return;
 
         if (elytraSwapped && !gliding && groundTicks > 1) {
@@ -341,16 +434,21 @@ public class Bot extends ServerPlayer implements Terminator {
             amount = maxHealth;
         }
 
-        setHealth(amount);
+        if (!hardness().tactical()) setHealth(amount);
 
         fallDamageCheck();
 
         oldVelocity = velocity;
 
         doTick();
+    
+        } finally { net.nuggetmc.tplus.utils.PerfProbe.end(net.nuggetmc.tplus.utils.PerfProbe.ENTITY, perfStart); }
     }
 
     private void loadChunks() {
+        long perfStart = net.nuggetmc.tplus.utils.PerfProbe.begin();
+        try {
+
         Level world = level();
         int chunkX = chunkPosition().x;
         int chunkZ = chunkPosition().z;
@@ -360,6 +458,8 @@ public class Bot extends ServerPlayer implements Terminator {
                 world.getChunk(i, j);
             }
         }
+    
+        } finally { net.nuggetmc.tplus.utils.PerfProbe.end(net.nuggetmc.tplus.utils.PerfProbe.CHUNKS, perfStart); }
     }
 
     /**
@@ -995,6 +1095,7 @@ public class Bot extends ServerPlayer implements Terminator {
         ItemStack remaining = stack.copy();
 
         for (int i = 1; i < items.size() && !remaining.isEmpty(); i++) {
+            if (i == consumableSlot) continue;
             ItemStack existing = items.get(i);
             if (!existing.isEmpty() && ItemStack.isSameItemSameComponents(existing, remaining) && existing.getCount() < existing.getMaxStackSize()) {
                 int move = Math.min(remaining.getCount(), existing.getMaxStackSize() - existing.getCount());
@@ -1004,6 +1105,7 @@ public class Bot extends ServerPlayer implements Terminator {
         }
 
         for (int i = 1; i < items.size() && !remaining.isEmpty(); i++) {
+            if (i == consumableSlot) continue;
             if (items.get(i).isEmpty()) {
                 items.set(i, remaining.split(Math.min(remaining.getCount(), remaining.getMaxStackSize())));
             }
@@ -1014,6 +1116,7 @@ public class Bot extends ServerPlayer implements Terminator {
 
     @Override
     public void clearInventory() {
+        cancelRecoveryItem();
         NonNullList<ItemStack> items = getInventory().items;
 
         for (int i = 1; i < items.size(); i++) {
@@ -1093,6 +1196,11 @@ public class Bot extends ServerPlayer implements Terminator {
     public void jump(Vec3 vel) {
         if (jumpTicks == 0 && groundTicks > 1) {
             jumpTicks = 4;
+            if (hardness().tactical()) {
+                double boost = hasEffect(MobEffects.JUMP)
+                        ? 0.1 * (getEffect(MobEffects.JUMP).getAmplifier() + 1) : 0;
+                vel = new Vec3(vel.x * potionSpeed(), vel.y + boost, vel.z * potionSpeed());
+            }
             velocity = vel;
         }
     }
@@ -1104,7 +1212,9 @@ public class Bot extends ServerPlayer implements Terminator {
 
     @Override
     public void walk(Vec3 vel) {
-        double max = 0.4;
+        double multiplier = hardness().tactical() ? potionSpeed() : 1;
+        double max = 0.4 * multiplier;
+        vel = new Vec3(vel.x * multiplier, vel.y, vel.z * multiplier);
 
         Vec3 sum = velocity.add(vel);
         if (sum.length() > max) sum = sum.normalize().scale(max);
@@ -1112,11 +1222,26 @@ public class Bot extends ServerPlayer implements Terminator {
         velocity = sum;
     }
 
+    /** Only the vanilla potion modifiers; difficulty itself never increases movement. */
+    private double potionSpeed() {
+        double speed = hasEffect(MobEffects.MOVEMENT_SPEED)
+                ? 0.2 * (getEffect(MobEffects.MOVEMENT_SPEED).getAmplifier() + 1) : 0;
+        double slow = hasEffect(MobEffects.MOVEMENT_SLOWDOWN)
+                ? 0.15 * (getEffect(MobEffects.MOVEMENT_SLOWDOWN).getAmplifier() + 1) : 0;
+        return Math.max(0, 1 + speed - slow);
+    }
+
     @Override
     public void attackTarget(Entity entity) {
+        if (isConsuming() || isAlliedTo(entity)) return;
         // any hit while falling with a mace becomes a smash attack, like for players
         if (entity instanceof LivingEntity living && canSmash()) {
             smash(living);
+            return;
+        }
+
+        if (hardness().tactical() && entity instanceof LivingEntity living) {
+            vanillaMelee(living);
             return;
         }
 
@@ -1128,6 +1253,32 @@ public class Bot extends ServerPlayer implements Terminator {
         if (entity instanceof LivingEntity) {
             entity.hurt(damageSources().playerAttack(this), (float) damage);
         }
+    }
+
+    private void vanillaMelee(LivingEntity target) {
+        ItemStack weapon = getWeapon();
+        int slot = findSlot(s -> s == weapon);
+        ItemStack hand = getMainHandItem();
+        getInventory().items.set(HAND_SLOT, weapon);
+        if (slot >= 0) getInventory().items.set(slot, hand);
+        detectEquipmentUpdates();
+        boolean ready = getAttackStrengthScale(0.5F) >= 0.95F;
+        boolean criticals = ((LegacyAgent) agent).getSkills().enabled(this, "criticals");
+        boolean critWeapon = weapon.getItem() instanceof SwordItem || weapon.getItem() instanceof AxeItem;
+        if (ready && criticals && critWeapon && isBotOnGround() && !isBotInWater() && !isClimbing()
+                && !hasEffect(MobEffects.BLINDNESS) && position().distanceTo(target.position()) < 2.8) {
+            jump();
+        } else if (ready && (!criticals || !critWeapon || velocity.y <= 0 || isBotInWater() || isClimbing())) {
+            faceLocation(target.getBoundingBox().getCenter());
+            setSprinting(false);
+            attack(target);
+            punch();
+        }
+        ItemStack used = getInventory().items.get(HAND_SLOT);
+        getInventory().items.set(HAND_SLOT, hand);
+        if (slot >= 0) getInventory().items.set(slot, used);
+        else defaultItem = used;
+        detectEquipmentUpdates();
     }
 
     @Override
@@ -1370,6 +1521,10 @@ public class Bot extends ServerPlayer implements Terminator {
 
         boolean damaged = super.hurt(damagesource, damage);
 
+        if (damaged && attacker instanceof LivingEntity living && attacker != this && !isAlliedTo(attacker)) {
+            ((LegacyAgent) agent).getSkills().onDamage(this, living);
+        }
+
         if (!damaged && blocking) {
             level().playSound(null, getX(), getY(), getZ(), SoundEvents.SHIELD_BLOCK, SoundSource.MASTER, 1, 1);
         }
@@ -1498,6 +1653,7 @@ public class Bot extends ServerPlayer implements Terminator {
      */
     @Override
     public void setItem(@Nullable ItemStack item, EquipmentSlot slot) {
+        if (slot == EquipmentSlot.MAINHAND && isConsuming()) return;
         if (item == null) item = slot == EquipmentSlot.MAINHAND ? getWeapon() : defaultItem;
 
         Inventory inventory = getInventory();

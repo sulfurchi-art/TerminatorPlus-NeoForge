@@ -78,6 +78,9 @@ public class TerminatorPlus {
         if (Boolean.getBoolean("terminatorplus.selftest")) {
             SelfTest.register();
         }
+        if (Boolean.getBoolean("terminatorplus.benchmark")) {
+            net.nuggetmc.tplus.utils.PerformanceTest.register();
+        }
     }
 
     public static TerminatorPlus getInstance() {

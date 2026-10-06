@@ -1,5 +1,6 @@
 package net.nuggetmc.tplus.api.agent.legacyagent.skill;
 
+import net.nuggetmc.tplus.bot.Bot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
 import net.nuggetmc.tplus.api.BotManager;
@@ -25,6 +26,7 @@ public class BotSkills {
     private final MaceSkill mace;
     private final PearlSkill pearls;
     private final BowSkill bow;
+    private final TacticalSkill tactics;
 
     public BotSkills(BotManager manager, SkillSettings settings) {
         this.manager = manager;
@@ -34,6 +36,7 @@ public class BotSkills {
         this.mace = new MaceSkill(this);
         this.pearls = new PearlSkill(this);
         this.bow = new BowSkill(this);
+        this.tactics = new TacticalSkill(this, manager);
     }
 
     public SkillSettings settings() {
@@ -60,17 +63,64 @@ public class BotSkills {
         return memories.computeIfAbsent(bot, b -> new BotMemory());
     }
 
+    public void benchmarkForcePathRecovery(Terminator bot, Vec3 target, long now) {
+        forget(bot);
+        BotMemory mem=memory(bot);
+        mem.progressPos=bot.getLocation();
+        mem.progressDistance=bot.getLocation().distanceTo(target);
+        mem.lastProgress=now-100;
+        mem.nextRecovery=0;
+    }
+
     public void forget(Terminator bot) {
+        tactics.cleanup(bot, memories.get(bot));
         memories.remove(bot);
     }
 
     public void clear() {
+        memories.forEach(tactics::cleanup);
         memories.clear();
         pathfinder.clear();
     }
 
     private long now() {
         return manager.getServer().getTickCount();
+    }
+
+    public Hardness hardness(Terminator bot) {
+        return new Hardness(bot.getEntity() instanceof Bot b && b.getHardnessOverride() != 0
+                ? b.getHardnessOverride() : settings.hardness);
+    }
+
+    public boolean enabled(Terminator bot, String name) {
+        return Boolean.TRUE.equals(settings.get(name)) && hardness(bot).allows(name);
+    }
+
+    public void onDamage(Terminator bot, LivingEntity attacker) {
+        BotMemory mem = memory(bot);
+        long tick = now();
+        if (tick - mem.pressureSince > 60) { mem.pressureSince = tick; mem.pressureHits = 0; }
+        mem.pressureHits++;
+        mem.lastDamage = tick;
+        mem.threat = attacker.position();
+    }
+
+    public boolean react(Terminator bot, @Nullable LivingEntity target) {
+        BotMemory mem = memory(bot);
+        int id = target == null ? -1 : target.getId();
+        if (mem.trackedTarget != id) mem.targetAcquired = now();
+        return target != null && now() - mem.targetAcquired >= hardness(bot).reactionTicks();
+    }
+
+    public Vec3 pursuitPoint(Terminator bot, LivingEntity target, Vec3 fallback) {
+        return tactics.pursuitPoint(bot, memory(bot), target, fallback);
+    }
+
+    public boolean meleeReady(Terminator bot) {
+        BotMemory mem = memory(bot);
+        if (now() < mem.nextMelee) return false;
+        mem.nextMelee = now() + hardness(bot).attackInterval();
+        return true;
     }
 
     /**
@@ -90,9 +140,11 @@ public class BotSkills {
         trackTarget(mem, target);
 
         // a new totem in the off hand as soon as one pops
-        if (settings.totems()) {
+        if (enabled(bot, "totems")) {
             bot.equipTotem();
         }
+
+        if (tactics.tick(bot, mem, target, now)) return true;
 
         if (pearls.tryVoidRescue(bot, mem, target, now)) {
             return true;
@@ -118,7 +170,7 @@ public class BotSkills {
      * Decides (a few times a second, on the ground) whether to start a mace dive, a pearl throw, a bow shot or a flight.
      */
     public boolean tryStart(Terminator bot, LivingEntity target) {
-        if (!bot.isBotOnGround() || bot.isBotInWater() || !bot.tickDelay(5)) return false;
+        if (!bot.isBotOnGround() || bot.isBotInWater() || !bot.tickDelay(hardness(bot).skillInterval())) return false;
 
         BotMemory mem = memory(bot);
         long now = now();

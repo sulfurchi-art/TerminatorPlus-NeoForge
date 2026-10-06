@@ -35,6 +35,11 @@ import net.nuggetmc.tplus.api.scheduler.TaskScheduler;
 import net.nuggetmc.tplus.api.scheduler.TickTask;
 import net.nuggetmc.tplus.api.utils.Location;
 import net.nuggetmc.tplus.bot.Bot;
+import net.nuggetmc.tplus.bot.EquipmentPresets;
+import net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent;
+import net.nuggetmc.tplus.api.agent.legacyagent.skill.BotMemory;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.scores.PlayerTeam;
 import net.nuggetmc.tplus.command.commands.AICommand;
 import org.slf4j.Logger;
 
@@ -125,6 +130,16 @@ public final class SelfTest {
         LOGGER.info("[SelfTest] starting, flat world surface at y={}", ground(0, 0));
 
         int y = ground(0, 0);
+        String focus = System.getProperty("terminatorplus.selftest.focus", "");
+        if (!focus.isBlank()) {
+            run("gamerule doDaylightCycle false"); run("gamerule doMobSpawning false"); cleanup();
+            List<String> names = List.of(focus.split(","));
+            List<Scenario> selected = hardnessScenarios(y).stream()
+                    .filter(s -> names.stream().anyMatch(s.name()::contains)).toList();
+            if (selected.isEmpty()) fail("no scenarios match selftestFocus");
+            runScenarios(selected, 0, this::summary);
+            return;
+        }
 
         // --- spawning & commands ---------------------------------------------------------------------------------
         at(20, "basic commands", () -> {
@@ -305,6 +320,7 @@ public final class SelfTest {
 
     private final List<Entity> spawned = new ArrayList<>();
     private final List<TickTask> trackers = new ArrayList<>();
+    private final List<PlayerTeam> testTeams = new ArrayList<>();
 
     private void runScenarios(List<Scenario> scenarios, int index, Runnable then) {
         if (index >= scenarios.size()) {
@@ -359,7 +375,11 @@ public final class SelfTest {
         spawned.clear();
         run("bot settings setgoal none");
         run("bot settings buildblock minecraft:cobblestone");
+        run("bot settings hardness 7");
+        run("bot preset use none");
         run("bot reset");
+        testTeams.forEach(server.getScoreboard()::removePlayerTeam);
+        testTeams.clear();
     }
 
     private void track(Runnable tracker) {
@@ -710,7 +730,253 @@ public final class SelfTest {
         }, () -> immortal[0].getAliveTicks() > 115 && immortal[0].isAlive()
                 && immortal[0].countItem(Items.TOTEM_OF_UNDYING) == 0 && immortal[0].getOffhandItem().isEmpty(), 200, true));
 
+        list.addAll(hardnessScenarios(y));
         return list;
+    }
+
+    private LegacyAgent legacy() { return (LegacyAgent) TerminatorPlus.getManager().getAgent(); }
+
+    private PlayerTeam testTeam(String name, Bot... bots) {
+        PlayerTeam team = server.getScoreboard().addPlayerTeam(name);
+        testTeams.add(team);
+        for (Bot bot : bots) server.getScoreboard().addPlayerToTeam(bot.getScoreboardName(), team);
+        return team;
+    }
+
+    private List<Scenario> hardnessScenarios(int y) {
+        List<Scenario> list = new ArrayList<>();
+        boolean[] commands = {false};
+        list.add(new Scenario("hardness command validation and per-bot override", () -> {
+            run("bot settings hardness 0");
+            run("bot settings hardness 11");
+            boolean unchanged = legacy().getSkillSettings().hardness == 7;
+            Bot one = spawnBot("EasyOverride", 1100.5, y, 0.5);
+            Bot two = spawnBot("DefaultSeven", 1110.5, y, 0.5);
+            run("bot settings hardness 1 EasyOverride");
+            commands[0] = unchanged && legacy().getSkills().hardness(one).level() == 1
+                    && legacy().getSkills().hardness(two).level() == 7
+                    && suggestions("bot settings hardness ").containsAll(List.of("1", "7", "10"));
+        }, () -> commands[0], 20, true));
+
+        Bot[] easy = {null}; Husk[] easyTarget = {null};
+        list.add(new Scenario("easy bot waits before reacting to a new opponent", () -> {
+            run("bot settings hardness 1"); run("bot settings setgoal nearesthostile");
+            easy[0] = spawnBot("SlowReaction", 1140.5, y, 0.5);
+            easy[0].setDefaultItem(new ItemStack(Items.IRON_SWORD));
+            easyTarget[0] = spawnHusk(1142.5, y, 0.5, 200, false);
+        }, () -> easy[0].getAliveTicks() >= 15 && easy[0].getAliveTicks() < 30 && easyTarget[0].getHealth() == 200, 20, true));
+
+        Bot[] casual = {null}, baseline = {null}; Husk[] casualTarget = {null}, baselineTarget = {null}; int[] hits = {0, 0};
+        list.add(new Scenario("easy bot attacks less frequently than baseline seven", () -> {
+            run("bot settings setgoal nearesthostile");
+            casual[0] = spawnBot("CasualCadence", 1180.5, y, 0.5); casual[0].setHardnessOverride(1);
+            baseline[0] = spawnBot("LegacyCadence", 1210.5, y, 0.5);
+            casual[0].setDefaultItem(new ItemStack(Items.IRON_SWORD)); baseline[0].setDefaultItem(new ItemStack(Items.IRON_SWORD));
+            casualTarget[0] = spawnHusk(1182.5, y, 0.5, 1000, false);
+            baselineTarget[0] = spawnHusk(1212.5, y, 0.5, 1000, false);
+            float[] previous = {1000, 1000};
+            track(() -> {
+                Husk[] targets = {casualTarget[0], baselineTarget[0]};
+                for (int i = 0; i < 2; i++) { if (targets[i].getHealth() < previous[i]) hits[i]++; previous[i] = targets[i].getHealth(); }
+            });
+        }, () -> casual[0].getAliveTicks() >= 120 && hits[0] > 0 && hits[1] > hits[0] + 2, 200, true));
+
+        Bot[] seven = {null};
+        list.add(new Scenario("seven preserves legacy recovery and does not consume food", () -> {
+            run("bot settings setgoal nearesthostile"); seven[0] = spawnBot("SevenBaseline", 1250.5, y, 0.5);
+            seven[0].setHealth(5); seven[0].giveItem(new ItemStack(Items.ENCHANTED_GOLDEN_APPLE));
+            spawnHusk(1256.5, y, 0.5, 1000, true);
+        }, () -> seven[0].getAliveTicks() >= 60 && seven[0].countItem(Items.ENCHANTED_GOLDEN_APPLE) == 1
+                && legacy().getSkills().memory(seven[0]).getTactic() == BotMemory.Tactic.FIGHT, 100, true));
+
+        Bot[] eater = {null};
+        list.add(new Scenario("high difficulty consumes one real golden apple with vanilla effects", () -> {
+            run("bot settings hardness 10"); run("bot settings setgoal nearesthostile");
+            eater[0] = spawnBot("RecoverApple", 1290.5, y, 0.5); eater[0].setHealth(5);
+            eater[0].getFoodData().setSaturation(0); eater[0].getFoodData().setFoodLevel(10);
+            eater[0].giveItem(new ItemStack(Items.ENCHANTED_GOLDEN_APPLE, 2)); spawnHusk(1298.5, y, 0.5, 1000, true);
+        }, () -> eater[0].countItem(Items.ENCHANTED_GOLDEN_APPLE) == 1 && eater[0].hasEffect(MobEffects.REGENERATION)
+                && eater[0].hasEffect(MobEffects.ABSORPTION) && eater[0].getHealth() > 5, 240, true));
+
+        Bot[] food = {null};
+        list.add(new Scenario("high difficulty eats food and recovers through vanilla hunger", () -> {
+            run("bot settings hardness 9"); run("bot settings setgoal none");
+            food[0] = spawnBot("RecoverFood", 1330.5, y, 0.5); food[0].setHealth(6);
+            food[0].getFoodData().setFoodLevel(10); food[0].getFoodData().setSaturation(0);
+            food[0].giveItem(new ItemStack(Items.COOKED_BEEF, 3));
+        }, () -> food[0].countItem(Items.COOKED_BEEF) < 3 && food[0].getFoodData().getFoodLevel() >= 18 && food[0].getHealth() > 6, 240, true));
+
+        Bot[] drinker = {null};
+        list.add(new Scenario("recovery potion heals through vanilla item use and leaves one glass bottle", () -> {
+            run("bot settings hardness 10"); run("bot settings setgoal none");
+            drinker[0] = spawnBot("RecoverPotion", 2170.5, y, 0.5); drinker[0].setHealth(5);
+            drinker[0].getFoodData().setFoodLevel(10); drinker[0].getFoodData().setSaturation(0);
+            ItemStack potion = new ItemStack(Items.POTION);
+            potion.set(net.minecraft.core.component.DataComponents.POTION_CONTENTS,
+                    new net.minecraft.world.item.alchemy.PotionContents(net.minecraft.world.item.alchemy.Potions.HEALING));
+            drinker[0].giveItem(potion);
+        }, () -> drinker[0].getHealth() >= 9 && drinker[0].countItem(Items.POTION) == 0
+                && drinker[0].countItem(Items.GLASS_BOTTLE) == 1, 120, true));
+
+        Bot[] chorus = {null}; Vec3[] beforeChorus = {null};
+        list.add(new Scenario("chorus fruit consumes a real item and uses vanilla random teleport", () -> {
+            run("bot settings hardness 9"); run("bot settings setgoal none"); forceArea(2210, -15, 2240, 15);
+            chorus[0] = spawnBot("ChorusEscape", 2220.5, y, 0.5); chorus[0].giveItem(new ItemStack(Items.CHORUS_FRUIT));
+            beforeChorus[0] = chorus[0].position();
+            chorus[0].beginRecoveryItem(true);
+        }, () -> !chorus[0].isConsuming() && chorus[0].countItem(Items.CHORUS_FRUIT) == 0
+                && horizontalDistance(chorus[0].position(), beforeChorus[0]) > 0.5, 100, true));
+
+        Bot[] cancel = {null};
+        list.add(new Scenario("difficulty change cancels eating without losing or duplicating the item", () -> {
+            run("bot settings hardness 10"); run("bot settings setgoal none");
+            cancel[0] = spawnBot("CancelEating", 1370.5, y, 0.5); cancel[0].setHealth(5);
+            cancel[0].getFoodData().setFoodLevel(10); cancel[0].giveItem(new ItemStack(Items.GOLDEN_APPLE, 2));
+            scheduler.runTaskLater(() -> run("bot settings hardness 7 CancelEating"), 15);
+        }, () -> cancel[0].getAliveTicks() >= 20 && !cancel[0].isConsuming() && cancel[0].countItem(Items.GOLDEN_APPLE) == 2
+                && !cancel[0].hasEffect(MobEffects.REGENERATION), 40, true));
+
+        Bot[] supplied = {null};
+        list.add(new Scenario("giving supplies during eating preserves both the real food and supplies", () -> {
+            run("bot settings hardness 10"); run("bot settings setgoal none");
+            supplied[0] = spawnBot("SupplyEating", 2270.5, y, 0.5); supplied[0].setHealth(5);
+            supplied[0].getFoodData().setFoodLevel(10); supplied[0].giveItem(new ItemStack(Items.GOLDEN_APPLE, 2));
+            scheduler.runTaskLater(() -> supplied[0].giveItem(new ItemStack(Items.ENDER_PEARL, 7)), 15);
+        }, () -> supplied[0].hasEffect(MobEffects.REGENERATION) && supplied[0].countItem(Items.GOLDEN_APPLE) == 1
+                && supplied[0].countItem(Items.ENDER_PEARL) == 7, 100, true));
+
+        Bot[] cleared = {null};
+        list.add(new Scenario("clearing inventory during eating cannot restore a removed consumable", () -> {
+            run("bot settings hardness 10"); run("bot settings setgoal none");
+            cleared[0] = spawnBot("ClearEating", 2310.5, y, 0.5); cleared[0].setHealth(5);
+            cleared[0].getFoodData().setFoodLevel(10); cleared[0].giveItem(new ItemStack(Items.GOLDEN_APPLE, 2));
+            scheduler.runTaskLater(() -> run("bot inventory clear"), 15);
+        }, () -> cleared[0].getAliveTicks() >= 45 && !cleared[0].isConsuming() && cleared[0].countItem(Items.GOLDEN_APPLE) == 0
+                && !cleared[0].hasEffect(MobEffects.REGENERATION), 60, true));
+
+        for (int hardness = 8; hardness <= 10; hardness++) {
+            int value = hardness;
+            Bot[] buffer = {null}, ally = {null};
+            list.add(new Scenario("team splash buffs at hardness " + value + " grant " + (value - 7) + " types", () -> {
+                run("bot settings hardness " + value); run("bot settings setgoal none");
+                buffer[0] = spawnBot("Buffer" + value, 1410.5 + (value - 8) * 40, y, 0.5);
+                ally[0] = spawnBot("BuffAlly" + value, 1412.5 + (value - 8) * 40, y, 0.5);
+                ally[0].setHardnessOverride(7); testTeam("selftest_buff" + value, buffer[0], ally[0]);
+            }, () -> {
+                int count = 0;
+                for (var effect : List.of(MobEffects.DAMAGE_BOOST, MobEffects.MOVEMENT_SPEED, MobEffects.JUMP)) if (ally[0].hasEffect(effect)) count++;
+                return count == value - 7 && buffer[0].countItem(Items.SPLASH_POTION) == 0;
+            }, 380, true));
+        }
+
+        Bot[] friendA = {null}, friendB = {null};
+        list.add(new Scenario("same-team bots never attack each other even in nearestbot mode", () -> {
+            run("bot settings hardness 10"); run("bot settings setgoal nearestbot");
+            friendA[0] = spawnBot("TeamFriendA", 1530.5, y, 0.5); friendB[0] = spawnBot("TeamFriendB", 1532.5, y, 0.5);
+            friendA[0].setDefaultItem(new ItemStack(Items.NETHERITE_SWORD)); friendB[0].setDefaultItem(new ItemStack(Items.NETHERITE_SWORD));
+            testTeam("selftest_friends", friendA[0], friendB[0]);
+        }, () -> friendA[0].getAliveTicks() >= 80 && friendA[0].getHealth() == 20 && friendB[0].getHealth() == 20, 120, true));
+
+        Bot[] pressure = {null}; Husk[] attacker = {null}; boolean[] escaped = {false};
+        list.add(new Scenario("sustained pressure makes a high difficulty bot disengage with a real pearl", () -> {
+            run("bot settings hardness 10"); run("bot settings setgoal nearesthostile"); forceArea(1570, -30, 1640, 30);
+            pressure[0] = spawnBot("UnderPressure", 1600.5, y, 0.5); pressure[0].giveItem(new ItemStack(Items.ENDER_PEARL, 4));
+            attacker[0] = spawnHusk(1604.5, y, 0.5, 1000, true);
+            scheduler.runTaskLater(() -> pressure[0].hurt(level.damageSources().mobAttack(attacker[0]), 1), 70);
+            scheduler.runTaskLater(() -> pressure[0].hurt(level.damageSources().mobAttack(attacker[0]), 1), 90);
+            track(() -> { if (legacy().getSkills().memory(pressure[0]).getTactic() == BotMemory.Tactic.RETREAT) escaped[0] = true; });
+        }, () -> escaped[0] && pressure[0].countItem(Items.ENDER_PEARL) < 4 && horizontal(pressure[0], attacker[0]) > 10, 240, true));
+
+        Bot[] guard = {null}, wounded = {null};
+        list.add(new Scenario("healthy teammate protects a wounded ally with cover", () -> {
+            run("bot settings hardness 10"); run("bot settings setgoal nearesthostile");
+            guard[0] = spawnBot("Bodyguard", 1670.5, y, 0.5); wounded[0] = spawnBot("WoundedAlly", 1670.5, y, 2.5);
+            wounded[0].setHardnessOverride(7); wounded[0].setHealth(5); testTeam("selftest_guard", guard[0], wounded[0]);
+            spawnHusk(1680.5, y, 1.5, 1000, true);
+        }, () -> legacy().getSkills().memory(guard[0]).getTactic() == BotMemory.Tactic.COVER_ALLY
+                && level.getBlockState(new BlockPos(1672, y + 1, 2)).is(Blocks.COBBLESTONE), 100, true));
+
+        Bot[] hunter = {null}; Husk[] weak = {null}; boolean[] wasHunt = {false};
+        list.add(new Scenario("weak opponent is tracked from the air while eating", () -> {
+            run("bot settings hardness 8"); run("bot settings setgoal nearesthostile"); forceArea(1710, -30, 1800, 30);
+            hunter[0] = spawnBot("AirHunter", 1730.5, y, 0.5); hunter[0].setHealth(10);
+            hunter[0].getFoodData().setFoodLevel(10); hunter[0].giveItem(new ItemStack(Items.ELYTRA));
+            hunter[0].giveItem(new ItemStack(Items.FIREWORK_ROCKET, 32)); hunter[0].giveItem(new ItemStack(Items.GOLDEN_APPLE));
+            weak[0] = spawnHusk(1760.5, y, 0.5, 20, true); weak[0].setHealth(4);
+            track(() -> { if (hunter[0].isGliding() && legacy().getSkills().memory(hunter[0]).getTactic() == BotMemory.Tactic.HUNT) wasHunt[0] = true; });
+        }, () -> wasHunt[0] && hunter[0].countItem(Items.GOLDEN_APPLE) == 0 && hunter[0].hasEffect(MobEffects.REGENERATION), 300, true));
+
+        for (var weapon : List.of(Items.DIAMOND_SWORD, Items.DIAMOND_AXE)) {
+            Bot[] fighter = {null}; Husk[] dummy = {null}; float[][] biggest = {null};
+            list.add(new Scenario("vanilla jumping critical with " + weapon, () -> {
+                run("bot settings hardness 10"); run("bot settings setgoal nearesthostile");
+                fighter[0] = spawnBot("CriticalFighter", 1830.5, y, 0.5); fighter[0].giveItem(new ItemStack(weapon));
+                dummy[0] = spawnHusk(1832.5, y, 0.5, 1000, false); biggest[0] = trackBiggestHit(dummy[0]);
+            }, () -> biggest[0][1] >= (weapon == Items.DIAMOND_SWORD ? 10 : 13)
+                    && fighter[0].findItem(s -> s.is(weapon)).getDamageValue() > 0, 400, true));
+        }
+
+        Bot[] diver = {null}; Husk[] runner = {null}; float[][] smash = {null};
+        list.add(new Scenario("high difficulty elytra mace intercepts a moving target", () -> {
+            run("bot settings hardness 10"); run("bot settings setgoal nearesthostile"); forceArea(1880, -25, 1980, 35);
+            diver[0] = spawnBot("LeadMace", 1890.5, y, 0.5); diver[0].giveItem(new ItemStack(Items.MACE));
+            diver[0].giveItem(new ItemStack(Items.ELYTRA)); diver[0].giveItem(new ItemStack(Items.FIREWORK_ROCKET, 64));
+            runner[0] = spawnHusk(1925.5, y, 0.5, 1000, false); smash[0] = trackBiggestHit(runner[0]);
+            track(() -> { double z = Math.sin(diver[0].getAliveTicks() * 0.012) * 10; runner[0].moveTo(1925.5, y, z); });
+        }, () -> smash[0][1] > 15, 1600, true));
+
+        boolean[] presetOk = {false};
+        list.add(new Scenario("equipment preset persists enchanted inventory armor and offhand without duplicates", () -> {
+            run("bot settings setgoal none"); Bot source = spawnBot("PresetSource", 2000.5, y, 0.5);
+            ItemStack sword = new ItemStack(Items.NETHERITE_SWORD); sword.setDamageValue(15);
+            sword.enchant(level.registryAccess().registryOrThrow(net.minecraft.core.registries.Registries.ENCHANTMENT)
+                    .getHolderOrThrow(net.minecraft.world.item.enchantment.Enchantments.SHARPNESS), 5);
+            source.getInventory().items.set(0, sword); source.setItem(new ItemStack(Items.DIAMOND_CHESTPLATE), EquipmentSlot.CHEST);
+            source.setItemOffhand(new ItemStack(Items.TOTEM_OF_UNDYING)); source.giveItem(new ItemStack(Items.GOLDEN_APPLE, 5));
+            source.giveItem(new ItemStack(Items.ENDER_PEARL, 7));
+            try {
+                var presets = TerminatorPlus.getManager().presets(); presets.save("selftest_gear", source); presets.select("selftest_gear");
+                EquipmentPresets loaded = new EquipmentPresets(server); Bot clone = spawnBot("PresetClone", 2010.5, y, 0.5);
+                ItemStack actual = clone.findItem(s -> s.is(Items.NETHERITE_SWORD));
+                presetOk[0] = loaded.get("selftest_gear") != null && "selftest_gear".equals(loaded.selectedName())
+                        && ItemStack.matches(actual, sword) && clone.countItem(Items.NETHERITE_SWORD) == 1
+                        && clone.countItem(Items.GOLDEN_APPLE) == 5 && clone.countItem(Items.ENDER_PEARL) == 7
+                        && clone.getItemBySlot(EquipmentSlot.CHEST).is(Items.DIAMOND_CHESTPLATE) && clone.getOffhandItem().is(Items.TOTEM_OF_UNDYING);
+                presets.select(null);
+            } catch (Exception e) { throw new RuntimeException(e); }
+        }, () -> presetOk[0], 20, true));
+
+        list.add(new Scenario("createpreset atomically applies equipment hardness and team after async creation", () -> {
+            run("team add selftest_spawn"); testTeams.add(server.getScoreboard().getPlayerTeam("selftest_spawn"));
+            run("bot createpreset selftest_gear Configured 9 selftest_spawn Steve 2040 " + y + " 0");
+        }, () -> {
+            Terminator bot = TerminatorPlus.getManager().getFirst("Configured", null);
+            return bot instanceof Bot b && legacy().getSkills().hardness(b).level() == 9 && b.countItem(Items.NETHERITE_SWORD) == 1
+                    && b.countItem(Items.GOLDEN_APPLE) == 5 && b.getTeam() == server.getScoreboard().getPlayerTeam("selftest_spawn");
+        }, 100, true));
+
+        boolean[] rejected = {false};
+        list.add(new Scenario("full preset is rejected without losing an inventory slot", () -> {
+            Bot full = spawnBot("FullInventory", 2070.5, y, 0.5);
+            for (int i = 0; i < 36; i++) full.getInventory().items.set(i, new ItemStack(Items.COBBLESTONE, 64));
+            try { EquipmentPresets.capture(full); } catch (IllegalArgumentException expected) { rejected[0] = true; }
+            try { TerminatorPlus.getManager().presets().delete("selftest_gear"); } catch (Exception e) { throw new RuntimeException(e); }
+        }, () -> rejected[0], 20, true));
+
+        boolean[] flanks = {false};
+        list.add(new Scenario("teammates choose separated pursuit lanes around the same target", () -> {
+            run("bot settings hardness 10"); run("bot settings setgoal none"); forceArea(2100, -10, 2150, 10);
+            Bot a = spawnBot("FlankA", 2110.5, y, 0.5), b = spawnBot("FlankB", 2110.5, y, 2.5);
+            testTeam("selftest_flanks", a, b); Husk target = spawnHusk(2130.5, y, 0.5, 1000, true);
+            Vec3 left = legacy().getSkills().pursuitPoint(a, target, target.position());
+            Vec3 right = legacy().getSkills().pursuitPoint(b, target, target.position());
+            flanks[0] = left.distanceTo(right) >= 4 && left.distanceTo(target.position()) <= 6 && right.distanceTo(target.position()) <= 6;
+        }, () -> flanks[0], 20, true));
+        return list;
+    }
+
+    private static double horizontalDistance(Vec3 a, Vec3 b) {
+        return a.subtract(b).multiply(1, 0, 1).length();
     }
 
     private void startReinforcement(int y) {

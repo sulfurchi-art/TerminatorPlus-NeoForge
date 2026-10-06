@@ -32,6 +32,9 @@ public class BotPathfinder {
      */
     @Nullable
     public List<BlockPos> find(ServerLevel level, Entity from, BlockPos goal, float range) {
+        long perfStart = net.nuggetmc.tplus.utils.PerfProbe.begin();
+        try {
+
         Zombie dummy = dummies.computeIfAbsent(level, BotPathfinder::createDummy);
 
         dummy.moveTo(from.getX(), from.getY(), from.getZ(), 0, 0);
@@ -57,6 +60,8 @@ public class BotPathfinder {
         }
 
         return nodes;
+    
+        } finally { net.nuggetmc.tplus.utils.PerfProbe.end(net.nuggetmc.tplus.utils.PerfProbe.PATH, perfStart); }
     }
 
     public void clear() {

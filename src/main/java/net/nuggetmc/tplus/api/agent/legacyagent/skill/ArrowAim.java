@@ -34,6 +34,20 @@ public final class ArrowAim {
      */
     @Nullable
     public static Solution solve(ServerLevel level, Entity shooter, LivingEntity target, Vec3 targetVelocity) {
+        long perfStart = net.nuggetmc.tplus.utils.PerfProbe.begin();
+        try {
+
+        if (net.nuggetmc.tplus.utils.PerfProbe.enabled && net.nuggetmc.tplus.utils.PerfProbe.mode >= 2) {
+            Vec3 start = new Vec3(shooter.getX(), shooter.getEyeY() - 0.1, shooter.getZ());
+            Vec3 center = target.position().add(0, target.getBbHeight() * 0.5, 0);
+            Vec3 velocity = target.onGround() ? new Vec3(targetVelocity.x, 0, targetVelocity.z) : targetVelocity;
+            var plan = net.nuggetmc.tplus.utils.BenchAim.choose(new net.nuggetmc.tplus.utils.BenchAim.Request(
+                    shooter.getId(), target.getId(), net.nuggetmc.tplus.utils.PerfProbe.tick,
+                    start.x, start.y, start.z, center.x, center.y, center.z, velocity.x, velocity.y, velocity.z));
+            Solution result = plan.solution();
+            return result != null && isClear(level, shooter, start, result, new Vec3(plan.gx(), plan.gy(), plan.gz())) ? result : null;
+        }
+
         Vec3 start = new Vec3(shooter.getX(), shooter.getEyeY() - 0.1, shooter.getZ());
         Vec3 center = target.position().add(0, target.getBbHeight() * 0.5, 0);
         // jumping around on the ground isn't worth leading vertically
@@ -49,6 +63,8 @@ public final class ArrowAim {
         }
 
         return solution != null && isClear(level, shooter, start, solution, goal) ? solution : null;
+    
+        } finally { net.nuggetmc.tplus.utils.PerfProbe.end(net.nuggetmc.tplus.utils.PerfProbe.ARROW, perfStart); }
     }
 
     /**

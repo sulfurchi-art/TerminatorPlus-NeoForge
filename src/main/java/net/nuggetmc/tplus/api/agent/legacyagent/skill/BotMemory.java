@@ -1,5 +1,9 @@
 package net.nuggetmc.tplus.api.agent.legacyagent.skill;
 
+import net.minecraft.core.GlobalPos;
+import net.minecraft.world.level.block.state.BlockState;
+import java.util.Map;
+import java.util.LinkedHashMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.Vec3;
 
@@ -25,7 +29,9 @@ public class BotMemory {
         /**
          * Climb above the target, stop gliding and smash down with a mace.
          */
-        MACE
+        MACE,
+        RECOVER,
+        HUNT
     }
 
     // ---- progress / stuck detection ----
@@ -87,6 +93,26 @@ public class BotMemory {
     @Nullable
     Vec3 lastTargetPos;
     Vec3 targetVelocity = Vec3.ZERO;
+
+    public enum Tactic { FIGHT, RETREAT, RECOVER, HUNT, COVER_ALLY }
+    Tactic tactic = Tactic.FIGHT;
+    long tacticSince;
+    long nextRetreat;
+    long targetAcquired;
+    long nextMelee;
+    long lastDamage = -1000;
+    long pressureSince;
+    int pressureHits;
+    @Nullable Vec3 threat;
+    @Nullable Vec3 safePoint;
+    @Nullable Vec3 flightGoal;
+    @Nullable Vec3 protectedAlly;
+    long nextCover;
+    long coverExpires;
+    long nextBuff;
+    long nextChorus;
+    final Map<GlobalPos, BlockState> cover = new LinkedHashMap<>();
+    public Tactic getTactic() { return tactic; }
 
     @Nullable
     Vec3 lastGround;

@@ -32,7 +32,7 @@ class ElytraPilot {
     }
 
     boolean canFly(Terminator bot) {
-        return skills.settings().elytra() && bot.hasUsableElytra() && bot.countItem(Items.FIREWORK_ROCKET) > 0;
+        return skills.enabled(bot, "elytra") && bot.hasUsableElytra() && bot.countItem(Items.FIREWORK_ROCKET) > 0;
     }
 
     /**
@@ -87,7 +87,8 @@ class ElytraPilot {
 
     private void takeoff(Terminator bot, BotMemory mem, @Nullable LivingEntity target, long now) {
         Vec3 pos = bot.getLocation();
-        float yaw = target != null ? SkillUtil.yawTo(pos, target.position()) : bot.getEntity().getYRot();
+        Vec3 goal = mem.flightGoal != null ? mem.flightGoal : target == null ? null : target.position();
+        float yaw = goal != null ? SkillUtil.yawTo(pos, goal) : bot.getEntity().getYRot();
         bot.setLook(yaw, -50);
         bot.stand();
 
@@ -114,18 +115,19 @@ class ElytraPilot {
         Vec3 pos = bot.getLocation();
         Vec3 velocity = bot.getVelocity();
 
-        if (target == null || !target.isAlive() || target.level() != level) {
+        if ((target == null || !target.isAlive() || target.level() != level) && mem.flightGoal == null) {
             // nothing to fly to: glide down and land
             steer(bot, entity.getYRot(), 25);
             return;
         }
 
-        Vec3 targetPos = target.position();
+        Vec3 targetPos = mem.flightGoal != null ? mem.flightGoal : target.position();
         double horizontal = SkillUtil.horizontalDistance(pos, targetPos);
         double ground = SkillUtil.surfaceY(level, pos);
         double desiredY;
         boolean boost = false;
         Float forcedPitch = null;
+        boolean tactical = skills.hardness(bot).tactical();
 
         if (mem.plan == BotMemory.FlightPlan.MACE) {
             desiredY = Math.max(targetPos.y + 14, ground + 6);
@@ -134,10 +136,15 @@ class ElytraPilot {
 
             if (height > 6) {
                 // where would the bot come down if it let go now? (bots keep their horizontal speed in the air)
-                double fallTicks = Math.sqrt(2 * height / 0.08) + 2;
+                double fallTicks = skills.hardness(bot).tactical() ? MaceSkill.fallTicks(height, velocity.y) : Math.sqrt(2 * height / 0.08) + 2;
+                if (skills.hardness(bot).tactical()) targetPos = target.position().add(mem.targetVelocity.scale(Math.min(25, fallTicks)));
                 Vec3 landing = pos.add(velocity.x * fallTicks, 0, velocity.z * fallTicks);
 
-                if (SkillUtil.horizontalDistance(landing, targetPos) < 2.5 || (horizontal < 2.5 && horizontalSpeed < 0.5)) {
+                double tolerance = skills.hardness(bot).tactical() ? 1.2 : 2.5;
+                double error = tactical ? MaceSkill.landingError(pos, velocity, target.position(), mem.targetVelocity)
+                        : SkillUtil.horizontalDistance(landing, targetPos);
+                if (error < tolerance && (!tactical || height < 40 && entity.hasLineOfSight(target))
+                        || !tactical && horizontal < 2.5 && horizontalSpeed < 0.5) {
                     bot.stopGliding();
                     end(mem, now);
                     skills.mace().startDrop(mem);
@@ -148,6 +155,12 @@ class ElytraPilot {
                 if (horizontal < 14 && horizontalSpeed > 0.45) {
                     forcedPitch = -65F;
                 }
+                if (tactical && height > 24) forcedPitch = 30F;
+            }
+        } else if (mem.plan == BotMemory.FlightPlan.RECOVER || mem.plan == BotMemory.FlightPlan.HUNT) {
+            desiredY = Math.max(targetPos.y, ground + 5);
+            if (mem.plan == BotMemory.FlightPlan.RECOVER && horizontal < 6) {
+                mem.flightGoal = targetPos.add(velocity.z * 3, 0, -velocity.x * 3);
             }
         } else {
             desiredY = horizontal > 20 ? Math.max(targetPos.y + 8, ground + 5) : targetPos.y + 1;
@@ -180,14 +193,16 @@ class ElytraPilot {
         double speed = velocity.length();
         boolean needAltitude = desiredY - pos.y > 4 && velocity.y < 0.2;
 
-        if (forcedPitch == null && !bot.isRocketBoosting() && now - mem.lastRocket > 15 && (boost || speed < 0.9 || needAltitude)) {
+        boolean altitudeAllowsRocket = !tactical || mem.plan != BotMemory.FlightPlan.MACE || pos.y < desiredY - 2;
+        if (altitudeAllowsRocket && forcedPitch == null && !bot.isRocketBoosting() && now - mem.lastRocket > 15 && (boost || speed < 0.9 || needAltitude)) {
             if (bot.fireRocket()) {
                 mem.lastRocket = now;
             }
         }
 
         // hit whatever we fly past
-        if (now >= mem.nextFlyingHit && SkillUtil.reach(entity, target) < 3.5) {
+        if (target != null && mem.plan != BotMemory.FlightPlan.RECOVER && mem.plan != BotMemory.FlightPlan.HUNT
+                && now >= mem.nextFlyingHit && SkillUtil.reach(entity, target) < (skills.hardness(bot).tactical() ? 3 : 3.5)) {
             bot.attackTarget(target);
             mem.nextFlyingHit = now + 10;
         }

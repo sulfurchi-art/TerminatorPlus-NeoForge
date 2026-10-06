@@ -1,5 +1,6 @@
 package net.nuggetmc.tplus.command.commands;
 
+import net.nuggetmc.tplus.api.agent.legacyagent.skill.Hardness;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
@@ -22,6 +23,8 @@ import net.nuggetmc.tplus.api.utils.ChatUtils;
 import net.nuggetmc.tplus.api.utils.Location;
 import net.nuggetmc.tplus.api.utils.MathUtils;
 import net.nuggetmc.tplus.bot.BotManagerImpl;
+import net.nuggetmc.tplus.bot.Bot;
+import net.nuggetmc.tplus.bot.EquipmentPresets;
 import net.nuggetmc.tplus.command.CommandHandler;
 import net.nuggetmc.tplus.command.CommandInstance;
 import net.nuggetmc.tplus.command.CommandUtils;
@@ -81,6 +84,100 @@ public class BotCommand extends CommandInstance {
         }
     }
 
+    @Command(name = "preset", desc = "Save and reuse your inventory and equipment.", autofill = "presetAutofill")
+    public void preset(CommandSourceStack sender, List<String> args) {
+        EquipmentPresets presets = manager().presets();
+        String action = args.isEmpty() ? "list" : args.getFirst().toLowerCase(Locale.ROOT);
+        String name = args.size() > 1 ? args.get(1) : null;
+        try {
+            switch (action) {
+                case "list" -> send(sender, "装备预设：" + String.join(", ", presets.names()) + "；默认：" + presets.selectedName());
+                case "save" -> {
+                    if (name == null || sender.getPlayer() == null) { send(sender, "玩家用法：/bot preset save <预设名>（保存当前背包与装备）"); return; }
+                    presets.save(name, sender.getPlayer());
+                    send(sender, "已保存装备预设 " + name + "（含附魔、耐久、数量和副手）。");
+                }
+                case "use" -> {
+                    if (name == null) { send(sender, "用法：/bot preset use <预设名|none>"); return; }
+                    presets.select(name.equalsIgnoreCase("none") ? null : name);
+                    send(sender, "新生成的机器人默认使用装备预设：" + presets.selectedName());
+                }
+                case "delete" -> {
+                    if (name == null) { send(sender, "用法：/bot preset delete <预设名>"); return; }
+                    presets.delete(name);
+                    send(sender, "已删除装备预设 " + name);
+                }
+                case "apply" -> {
+                    EquipmentPresets.Preset preset = name == null ? null : presets.get(name);
+                    if (preset == null) { send(sender, "找不到装备预设。用法：/bot preset apply <预设名> [机器人名|all]"); return; }
+                    List<Terminator> bots = selectedBots(sender, args.size() > 2 ? args.get(2) : null);
+                    for (Terminator bot : bots) {
+                        agent().getSkills().forget(bot);
+                        preset.apply((Bot) bot);
+                    }
+                    send(sender, "已为 " + bots.size() + " 个机器人替换背包与装备。");
+                }
+                default -> send(sender, "用法：/bot preset <save|list|use|apply|delete> [预设名] [机器人名|all]");
+            }
+        } catch (java.io.IOException | IllegalArgumentException e) { send(sender, ChatFormatting.RED + e.getMessage()); }
+    }
+
+    private static List<Terminator> selectedBots(CommandSourceStack sender, String name) {
+        if (name == null || name.equalsIgnoreCase("all")) return new ArrayList<>(manager().fetch());
+        Terminator bot = manager().getFirst(name, sender.getPlayer() == null ? null : Location.of(sender.getPlayer()));
+        if (bot == null) throw new IllegalArgumentException("找不到机器人：" + name);
+        return List.of(bot);
+    }
+
+    @Autofill
+    public List<String> presetAutofill(CommandSourceStack sender, String[] args) {
+        if (args.length == 2) return List.of("save", "list", "use", "apply", "delete");
+        if (args.length == 3) {
+            List<String> names = new ArrayList<>(manager().presets().names());
+            if (args[1].equalsIgnoreCase("use")) names.add("none");
+            return names;
+        }
+        if (args.length == 4 && args[1].equalsIgnoreCase("apply")) return manager().fetchNames();
+        return List.of();
+    }
+
+    @Command(name = "createpreset", desc = "Spawn with a saved equipment preset and AI hardness.", autofill = "createPresetAutofill")
+    public void createPreset(CommandSourceStack sender, @Arg("preset") String presetName, @Arg("name") String name,
+                             @Arg("hardness") int hardness, @OptArg("team") String team, @OptArg("skin") String skin,
+                             @TextArg @OptArg("loc") String loc) {
+        EquipmentPresets.Preset preset = manager().presets().get(presetName);
+        if (preset == null || hardness < 1 || hardness > 10) { send(sender, "预设必须存在，AI hardness 必须为 1–10。"); return; }
+        Location location = CommandUtils.parseSpawnLocation(sender, loc);
+        if (location == null) return;
+        try { manager().createConfiguredBots(sender, name, skin, location, preset, hardness, team == null || team.equalsIgnoreCase("none") ? null : team); }
+        catch (IllegalArgumentException e) { send(sender, ChatFormatting.RED + e.getMessage()); }
+    }
+
+    @Autofill
+    public List<String> createPresetAutofill(CommandSourceStack sender, String[] args) {
+        if (args.length == 2) return new ArrayList<>(manager().presets().names());
+        if (args.length == 4) return List.of("1", "2", "3", "4", "5", "6", "7", "8", "9", "10");
+        if (args.length == 5) {
+            List<String> teams = new ArrayList<>(sender.getServer().getScoreboard().getTeamNames()); teams.add("none"); return teams;
+        }
+        return List.of();
+    }
+
+    @Command(name = "team", desc = "Assign bots to an existing vanilla scoreboard team.")
+    public void team(CommandSourceStack sender, @Arg("team") String name, @OptArg("bot-name") String botName) {
+        var scoreboard = sender.getServer().getScoreboard();
+        var team = scoreboard.getPlayerTeam(name);
+        if (!name.equalsIgnoreCase("none") && team == null) { send(sender, "找不到原版队伍：" + name + "；先 /team add " + name); return; }
+        try {
+            List<Terminator> bots = selectedBots(sender, botName);
+            for (Terminator bot : bots) {
+                if (team == null) scoreboard.removePlayerFromTeam(bot.getEntity().getScoreboardName());
+                else scoreboard.addPlayerToTeam(bot.getEntity().getScoreboardName(), team);
+            }
+            send(sender, "已为 " + bots.size() + " 个机器人设置队伍：" + name);
+        } catch (IllegalArgumentException e) { send(sender, ChatFormatting.RED + e.getMessage()); }
+    }
+
     @Command(
             name = "give",
             desc = "Gives a specified item to all bots."
@@ -96,7 +193,7 @@ public class BotCommand extends CommandInstance {
 
         ItemStack item = new ItemStack(type.get());
 
-        manager().fetch().forEach(bot -> bot.setDefaultItem(item));
+        manager().fetch().forEach(bot -> bot.setDefaultItem(item.copy()));
 
         send(sender, "Successfully set the default item to " + ChatFormatting.YELLOW + BuiltInRegistries.ITEM.getKey(type.get()) + ChatFormatting.RESET + " for all current bots.");
     }
@@ -197,6 +294,8 @@ public class BotCommand extends CommandInstance {
             send(sender, ChatUtils.BULLET_FORMATTED + "World: " + world);
             send(sender, ChatUtils.BULLET_FORMATTED + "Position: " + strLoc);
             send(sender, ChatUtils.BULLET_FORMATTED + "Velocity: " + strVel);
+            send(sender, ChatUtils.BULLET_FORMATTED + "AI hardness: " + agent().getSkills().hardness(bot).level()
+                    + " / 10; tactic: " + agent().getSkills().memory(bot).getTactic());
             send(sender, ChatUtils.LINE);
         } catch (Exception e) {
             send(sender, ChatUtils.EXCEPTION_MESSAGE);
@@ -269,9 +368,11 @@ public class BotCommand extends CommandInstance {
 
         if (arg1 == null || (!arg1.equalsIgnoreCase("setgoal") && !arg1.equalsIgnoreCase("mobtarget") && !arg1.equalsIgnoreCase("playertarget")
                 && !arg1.equalsIgnoreCase("addplayerlist") && !arg1.equalsIgnoreCase("region")
-                && !arg1.equalsIgnoreCase("range") && !arg1.equalsIgnoreCase("ability") && !arg1.equalsIgnoreCase("buildblock"))) {
+                && !arg1.equalsIgnoreCase("range") && !arg1.equalsIgnoreCase("ability") && !arg1.equalsIgnoreCase("buildblock")
+                && !arg1.equalsIgnoreCase("hardness"))) {
             send(sender, ChatUtils.LINE);
             send(sender, ChatFormatting.GOLD + "Bot Settings" + extra);
+            send(sender, "/bot settings hardness <1–10> [机器人名]；7 为原有水平，无名字时设置全体与默认值。");
             send(sender, ChatUtils.BULLET_FORMATTED + ChatFormatting.YELLOW + "setgoal" + ChatUtils.BULLET_FORMATTED + "Set the global bot target selection method.");
             send(sender, ChatUtils.BULLET_FORMATTED + ChatFormatting.YELLOW + "mobtarget" + ChatUtils.BULLET_FORMATTED + "Allow all bots to be targeted by hostile mobs.");
             send(sender, ChatUtils.BULLET_FORMATTED + ChatFormatting.YELLOW + "playertarget" + ChatUtils.BULLET_FORMATTED + "Sets a player name for spawned bots to focus on if the goal is PLAYER.");
@@ -282,6 +383,21 @@ public class BotCommand extends CommandInstance {
             send(sender, ChatUtils.BULLET_FORMATTED + ChatFormatting.YELLOW + "buildblock" + ChatUtils.BULLET_FORMATTED + "Sets the block bots build pillars, bridges and clutches with.");
             send(sender, ChatUtils.LINE);
             return;
+        } else if (arg1.equalsIgnoreCase("hardness")) {
+            if (arg2 == null) { send(sender, "默认 AI hardness：" + agent.getSkillSettings().hardness + " / 10"); return; }
+            try {
+                int value = Integer.parseInt(arg2);
+                new Hardness(value);
+                String botName = args.size() > 2 ? args.get(2) : null;
+                List<Terminator> bots = selectedBots(sender, botName);
+                if (botName == null || botName.equalsIgnoreCase("all")) agent.getSkillSettings().hardness = value;
+                for (Terminator bot : bots) {
+                    ((Bot) bot).cancelRecoveryItem();
+                    ((Bot) bot).setHardnessOverride(botName == null || botName.equalsIgnoreCase("all") ? 0 : value);
+                    agent.getSkills().forget(bot);
+                }
+                send(sender, "已设置 AI hardness=" + value + "，影响 " + bots.size() + " 个机器人。");
+            } catch (IllegalArgumentException e) { send(sender, ChatFormatting.RED + e.getMessage()); }
         } else if (arg1.equalsIgnoreCase("range")) {
             SkillSettings skills = agent.getSkillSettings();
             if (arg2 == null) {
@@ -493,10 +609,15 @@ public class BotCommand extends CommandInstance {
             output.add("range");
             output.add("ability");
             output.add("buildblock");
+            output.add("hardness");
+        } else if (args.length == 4 && args[1].equalsIgnoreCase("hardness")) {
+            output.addAll(manager().fetchNames());
+            output.add("all");
         } else if (args.length == 4 && args[1].equalsIgnoreCase("ability")) {
             output.add("true");
             output.add("false");
         } else if (args.length == 3) {
+            if (args[1].equalsIgnoreCase("hardness")) output.addAll(List.of("1", "2", "3", "4", "5", "6", "7", "8", "9", "10"));
             if (args[1].equalsIgnoreCase("range")) {
                 output.addAll(List.of("unlimited", "32", "64", "128", "256"));
             }

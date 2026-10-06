@@ -47,6 +47,17 @@ neoForge {
             gameDirectory = project.file('run-selftest')
             systemProperty 'terminatorplus.selftest', 'true'
             systemProperty 'terminatorplus.fetchSkins', 'false'
+            systemProperty 'terminatorplus.selftest.focus', providers.gradleProperty('selftestFocus').getOrElse('')
+        }
+
+        benchmark {
+            server()
+            programArgument '--nogui'
+            gameDirectory = project.file('run-benchmark')
+            systemProperty 'terminatorplus.benchmark', 'true'
+            systemProperty 'terminatorplus.fetchSkins', 'false'
+            jvmArgument '-Xms2G'
+            jvmArgument '-Xmx4G'
         }
 
         configureEach {

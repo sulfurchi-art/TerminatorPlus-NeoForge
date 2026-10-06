@@ -15,6 +15,33 @@ import javax.annotation.Nullable;
  */
 class MaceSkill {
 
+    /** Match Bot's existing fall integrator; no extra steering speed or acceleration. */
+    static int fallTicks(double height, double velocityY) {
+        int ticks = 0;
+        while (height > 0 && ticks < 120) {
+            height += velocityY;
+            velocityY = Math.max(-3.5, velocityY - 0.08);
+            ticks++;
+        }
+        return Math.max(1, ticks);
+    }
+
+    /** Predict the landing under the same bounded steering used by tickDrop. */
+    static double landingError(Vec3 pos, Vec3 velocity, Vec3 target, Vec3 targetVelocity) {
+        int ticks = fallTicks(Math.max(0.1, pos.y - target.y), velocity.y);
+        Vec3 horizontal = new Vec3(velocity.x, 0, velocity.z);
+        Vec3 destination = target.add(targetVelocity.scale(Math.min(25, ticks)));
+        for (int remaining = ticks; remaining > 0; remaining--) {
+            Vec3 wanted = destination.subtract(pos).multiply(1, 0, 1).scale(1.0 / remaining);
+            if (wanted.length() > 0.5) wanted = wanted.normalize().scale(0.5);
+            Vec3 change = wanted.subtract(horizontal);
+            if (change.length() > 0.08) change = change.normalize().scale(0.08);
+            horizontal = horizontal.add(change);
+            pos = pos.add(horizontal);
+        }
+        return SkillUtil.horizontalDistance(pos, destination);
+    }
+
     private final BotSkills skills;
 
     MaceSkill(BotSkills skills) {
@@ -22,14 +49,14 @@ class MaceSkill {
     }
 
     boolean tryStart(Terminator bot, BotMemory mem, LivingEntity target, long now) {
-        if (!skills.settings().mace() || !bot.hasMace() || now < mem.nextMaceAttempt) return false;
+        if (!skills.enabled(bot, "mace") || !bot.hasMace() || now < mem.nextMaceAttempt) return false;
 
         Vec3 pos = bot.getLocation();
         double horizontal = SkillUtil.horizontalDistance(pos, target.position());
         double dy = target.getY() - pos.y;
 
         // close: wind charge at our feet, up we go
-        if (skills.settings().windCharges() && bot.countItem(Items.WIND_CHARGE) > 0 && now >= mem.nextWindCharge
+        if (skills.enabled(bot, "windcharges") && bot.countItem(Items.WIND_CHARGE) > 0 && now >= mem.nextWindCharge
                 && horizontal >= 1.0 && horizontal <= 5.5 && Math.abs(dy) < 2.5
                 && SkillUtil.headroom(bot.getBotLevel(), bot.getEntity(), 9)) {
             launch(bot, mem, target, horizontal, now);
@@ -37,7 +64,7 @@ class MaceSkill {
         }
 
         // further away with open sky above the target: climb with the elytra and dive
-        if (skills.settings().elytra() && skills.pilot().canFly(bot) && horizontal >= 3 && horizontal <= 80
+        if (skills.enabled(bot, "elytra") && skills.pilot().canFly(bot) && horizontal >= 3 && horizontal <= 80
                 && SkillUtil.openSky(bot.getBotLevel(), target)) {
             mem.nextMaceAttempt = now + 200;
             return skills.pilot().tryStart(bot, mem, BotMemory.FlightPlan.MACE, now);
@@ -91,6 +118,10 @@ class MaceSkill {
                 ? height / Math.max(0.3, -velocity.y)
                 : Math.sqrt(2 * height / 0.08) + velocity.y / 0.08;
         ticksLeft = Math.max(1, ticksLeft);
+        if (skills.hardness(bot).tactical()) {
+            ticksLeft = fallTicks(height, velocity.y);
+            targetPos = targetPos.add(mem.targetVelocity.scale(Math.min(25, ticksLeft)));
+        }
 
         Vec3 wanted = new Vec3((targetPos.x - pos.x) / ticksLeft, 0, (targetPos.z - pos.z) / ticksLeft);
         if (wanted.length() > 0.5) wanted = wanted.normalize().scale(0.5);
@@ -103,7 +134,8 @@ class MaceSkill {
         bot.stand();
         bot.setItem(maceStack(bot));
 
-        if (velocity.y < 0 && bot.canSmash() && SkillUtil.reach(bot.getEntity(), target) < 3.5) {
+        if (velocity.y < 0 && bot.canSmash() && SkillUtil.reach(bot.getEntity(), target) < (skills.hardness(bot).tactical() ? 3 : 3.5)
+                && (!skills.hardness(bot).tactical() || bot.getEntity().hasLineOfSight(target))) {
             bot.smash(target);
             mem.maceDrop = false;
             mem.nextMaceAttempt = now + 40;

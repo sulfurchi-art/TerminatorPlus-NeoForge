@@ -36,6 +36,9 @@ public final class PearlAim {
      */
     @Nullable
     public static Solution solve(ServerLevel level, Entity thrower, Vec3 goal, double tolerance) {
+        long perfStart = net.nuggetmc.tplus.utils.PerfProbe.begin();
+        try {
+
         Vec3 start = new Vec3(thrower.getX(), thrower.getEyeY() - 0.1, thrower.getZ());
         float yaw = (float) Math.toDegrees(Math.atan2(-(goal.x - start.x), goal.z - start.z));
 
@@ -53,6 +56,8 @@ public final class PearlAim {
         }
 
         return best != null && best.error() <= tolerance ? best : null;
+    
+        } finally { net.nuggetmc.tplus.utils.PerfProbe.end(net.nuggetmc.tplus.utils.PerfProbe.PEARL, perfStart); }
     }
 
     @Nullable

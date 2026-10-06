@@ -1,7 +1,7 @@
 # 开发交接文档
 
 > 写给接手这个项目的 AI 编程助手。人类用户说中文，回复请用简体中文。
-> 最后更新：2026-10-04。面向玩家的用法见 `README.md`，本文件讲实现细节、测试方法和接手须知。
+> 最后更新：2026-10-04（4.6.0-BETA AI hardness）。面向玩家的用法见 `README.md` 和 `AI_HARDNESS.md`，本文件讲实现细节、测试方法和接手须知。
 
 ## 项目是什么
 
@@ -21,7 +21,7 @@
 
 ```bash
 export JAVA_HOME="C:/Program Files/Microsoft/jdk-21.0.7.6-hotspot"   # 用户机器上的 JDK 21
-./gradlew build          # 产物：build/libs/TerminatorPlus-NeoForge-1.21.1-4.5.1-BETA.jar
+./gradlew build          # 产物：build/libs/TerminatorPlus-NeoForge-1.21.1-4.6.0-BETA.jar
 ./gradlew runSelfTest    # 全套自测，约 4–5 分钟，见下文"测试"
 ```
 
@@ -104,7 +104,7 @@ export JAVA_HOME="C:/Program Files/Microsoft/jdk-21.0.7.6-hotspot"   # 用户机
    - 要用某件物品时，把真物品换进第 0 格，用完再换回去。`smash` 和 `shootBow` 都是这么做的。
    - **不要用原版 `/give` 给机器人物品**，物品可能进第 0 格然后被覆盖掉。改用 `/item replace entity <机器人> hotbar.1-8|inventory.0-26|armor.*|weapon.offhand with ...`。
 3. **伤害：**
-   - 普通近战按 `ItemUtils.getLegacyAttackDamage` 的固定伤害表算（下界合金剑 8 点，是最高值），**不吃附魔、力量和暴击**。
+   - 难度 1–7 普通近战按 `ItemUtils.getLegacyAttackDamage` 的固定伤害表算（下界合金剑 8 点，是最高值），**不吃附魔、力量和暴击**。8–10 使用真实武器和原版 `Player.attack`，等待冷却并尝试下落暴击，附魔、力量与耐久生效。
    - 重锤 `smash` 和弓 `shootBow` 走原版攻击和原版弓的逻辑，所以附魔全部生效。
    - 机器人受伤走原版 `hurt`，护甲、保护、荆棘、图腾都生效；之后由 `kb()` 自己计算击退。
 4. **选择器：** 机器人默认不在 PlayerList 里（`addplayerlist` 默认关）。
@@ -120,7 +120,8 @@ export JAVA_HOME="C:/Program Files/Microsoft/jdk-21.0.7.6-hotspot"   # 用户机
 ## 测试
 
 - **怎么跑：** `./gradlew runSelfTest` 会在 `run-selftest/` 里起一个超平坦专用服，带 `-Dterminatorplus.selftest=true` 和 `-Dterminatorplus.fetchSkins=false`，自动跑完所有场景后关服。
-- **看结果：** 在 `run-selftest/logs/latest.log` 里搜 `[SelfTest]`，最后一行应该是 `ALL 44 CHECKS PASSED`。
+- **看结果：** 在 `run-selftest/logs/latest.log` 里搜 `[SelfTest]`，完整测试最后一行应该是 `ALL 69 CHECKS PASSED`。Gradle 成功退出不代表场景全部通过，必须检查这个汇总。
+- **定向调试：** `./gradlew runSelfTest "-PselftestFocus=pressure,moving target"` 仅执行名称包含对应文本的新场景；部署前仍需跑不带该参数的完整测试。
 - **加场景：** 在 `SelfTest.skillScenarios()` 里加一个 `Scenario(name, setup, passed, timeout, cleanup)`。
   - 可以用的辅助方法：`spawnBot`、`spawnHusk`、`forceArea`、`setBlock`、`track`、`trackBiggestHit`。
   - 每个场景要占一块没被占用的 x 坐标区域，目前已经用到 x≈985。
@@ -128,6 +129,19 @@ export JAVA_HOME="C:/Program Files/Microsoft/jdk-21.0.7.6-hotspot"   # 用户机
 - **改了行为就要同步：** 加或改对应场景，并更新 `README.md` 里的检查数量和场景列表。
 
 ## 最近的改动（2026-10-04）
+
+### 4.6.0-BETA：AI hardness 与装备预设
+
+- `skill/Hardness.java`：1–10 难度策略，7 为旧版基线；低难度降低反应、攻击频率与技能覆盖，难度不会提供移动加成。
+- `skill/TacticalSkill.java`：8–10 级撤离、补给、临时掩体、空中追踪、队友支援、原版喷溅增益药水和分散追击。
+- `BotMemory` 新增战术状态、受击压力、恢复位置、飞行目标与掩体所有权；机器人移除或清空记忆时清理仍保持原样的自建掩体。
+- `Bot` 新增真实物品使用流程，原版饥饿/饱和度恢复（仅 8–10），高难近战冷却与暴击；原版速度和跳跃药水的倍率适配自定义物理。
+- `MaceSkill` 与 `ElytraPilot` 用既有重力、速度与转向上限预测坠落及移动目标位置，控制拉升高度。
+- `bot/EquipmentPresets.java`：当前世界 `data/terminatorplus-presets.dat` 保存背包、护甲、副手和武器组件，临时文件原子替换，机器人使用独立物品副本。第 0 格始终留给 AI，拒绝 36 个非空背包格的快照。
+- 新命令：`settings hardness`、`preset`、`createpreset`、`team`。全局难度不持久化，预设和默认预设持久化。皮肤异步请求完成后应用创建时捕获的配置。
+- 自测新增 25 项，总数 69；覆盖真实补给/取消、不同药水种类、友军保护、压力撤离、剑斧暴击、移动目标重锤、预设持久化与异步生成等。
+
+### 4.5.1-BETA 基线
 
 - **兼容：** 编译版本降到 NeoForge 21.1.1，声明兼容 `[21.1.1,)`。用户的整合包是 21.1.249。
 - **新能力 `bow`：** 目标在 8–60 格外、并且有射击线路时，站定拉满弓 20 tick 再射。
@@ -144,9 +158,9 @@ export JAVA_HOME="C:/Program Files/Microsoft/jdk-21.0.7.6-hotspot"   # 用户机
 
 ## 已知限制 / 可以做的方向
 
-- **普通近战不吃附魔：** 可以改成走原版 `Player.attack`，但这会改变原插件的平衡和训练模式，改之前先问用户。
+- **普通近战：** 1–7 保持旧版固定伤害，8–10 按用户要求使用原版攻击、附魔和暴击。训练默认仍是难度 7。
 - **盾牌：** 格挡只有动作，没有实际效果，和原插件一样。
-- **消耗品：** 不会吃金苹果、喝药水。用户的数据包用 `/effect` 代替。
+- **消耗品：** 1–7 仍不会吃金苹果、喝药水；8–10 会实际使用食物、金苹果与恢复药水，9–10 还可吃紫颂果。
 - **装备和道具：** 不会换盔甲（打烂就没了），不会用水晶和重生锚。
 - **持久化：** 设置和机器人都不持久化，可以考虑加配置文件。
 - **爆炸击退：** 机器人吃不到爆炸击退，原因见"关键机制"第 1 条。
