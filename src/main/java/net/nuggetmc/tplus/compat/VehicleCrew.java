@@ -233,13 +233,17 @@ public final class VehicleCrew {
         else if (relative.lengthSqr() > 36) goal = e.position().add(side.scale(radius));
         goal = net.nuggetmc.tplus.api.agent.legacyagent.skill.MovementBounds.clamp(bot, goal, 3);
         Vec3 delta = goal.subtract(bot.position()).multiply(1, 0, 1), step = delta.normalize().scale(0.2);
-        if (bot.level().noCollision(bot, bot.getBoundingBox().move(step))) {
+        if ((member.entryPath == null || member.entryIndex >= member.entryPath.size()) && entryStepSafe(bot, step)) {
             member.entryPath = null; bot.faceLocation(goal);
             if (bot.isBotOnGround()) bot.walk(step); return;
         }
-        if (now >= member.nextEntryPath) {
+        if ((member.entryPath == null || member.entryIndex >= member.entryPath.size()) && now >= member.nextEntryPath) {
             member.nextEntryPath = now + 40; member.entryIndex = 1;
             member.entryPath = skills.pathfinder().find(bot.serverLevel(), bot, BlockPos.containing(goal.x, bot.getY(), goal.z), 32);
+        }
+        if (member.entryPath != null && member.entryIndex < member.entryPath.size()) {
+            while (member.entryIndex < member.entryPath.size() && Vec3.atBottomCenterOf(member.entryPath.get(member.entryIndex)).subtract(bot.position()).horizontalDistance() < 0.5)
+                member.entryIndex++;
         }
         if (member.entryPath != null && member.entryIndex < member.entryPath.size()) {
             Vec3 node = Vec3.atBottomCenterOf(member.entryPath.get(member.entryIndex));
@@ -247,13 +251,24 @@ public final class VehicleCrew {
             else {
                 Vec3 direction = node.subtract(bot.position()).multiply(1, 0, 1).normalize().scale(0.2);
                 bot.faceLocation(node);
-                if (bot.isBotOnGround() && bot.level().noCollision(bot, bot.getBoundingBox().move(direction))) {
+                if (bot.isBotOnGround() && (node.y > bot.getY() + 0.4
+                        ? bot.level().noCollision(bot, bot.getBoundingBox().move(direction)) : entryStepSafe(bot, direction))) {
                     if (node.y > bot.getY() + 0.4) bot.jump(direction.add(0, 0.42, 0)); else bot.walk(direction);
                     return;
                 }
+                member.entryPath = null; member.nextEntryPath = now + 10;
             }
         }
         bot.walk(Vec3.ZERO);
+    }
+
+    private static boolean entryStepSafe(Bot bot, Vec3 step) {
+        if (!bot.level().noCollision(bot, bot.getBoundingBox().move(step))) return false;
+        // A clear torso is not a walkable route: check the ground ahead before taking the direct shortcut.
+        Vec3 ahead = bot.position().add(step.normalize().scale(0.5));
+        BlockPos floor = BlockPos.containing(ahead.x, ahead.y - 0.2, ahead.z);
+        if (!bot.level().hasChunkAt(floor) || !bot.level().getFluidState(floor).isEmpty()) return false;
+        return !bot.level().getBlockState(floor).getCollisionShape(bot.level(), floor).isEmpty();
     }
 
     private void autoJoin(Bot bot, @Nullable LivingEntity enemy, long now) {

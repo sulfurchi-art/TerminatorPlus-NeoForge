@@ -129,6 +129,12 @@ public final class SelfTest {
     }
 
     private void start() {
+        // Track only this test's real shots. Remove leftovers after assertions, before the next fixture.
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.entity.EntityJoinLevelEvent event) -> {
+            if (event.getLevel() == level && event.getEntity() instanceof net.minecraft.world.entity.projectile.Projectile projectile
+                    && (projectile.getOwner() instanceof Bot || spawned.contains(projectile.getOwner())) && !spawned.contains(projectile))
+                spawned.add(projectile);
+        });
         legacy().getSkillSettings().load(new net.nuggetmc.tplus.api.agent.legacyagent.skill.SkillSettings().save());
         legacy().getSkillSettings().defaultEquipment = false;
         run("bot settings hardness 7");
@@ -379,7 +385,9 @@ public final class SelfTest {
         scenarioHooks.forEach(Runnable::run); scenarioHooks.clear();
         trackers.forEach(TickTask::cancel);
         trackers.clear();
-        spawned.forEach(Entity::discard);
+        var remaining = spawned.stream().filter(e -> !e.isRemoved() && e instanceof net.minecraft.world.entity.projectile.Projectile).toList();
+        if (!remaining.isEmpty()) LOGGER.info("[SelfTest] Post-assertion cleanup of test-owned projectiles: {}", remaining.stream().map(e -> e.getClass().getSimpleName() + "@" + e.blockPosition().toShortString()).toList());
+        List.copyOf(spawned).forEach(Entity::discard);
         server.getPlayerList().players.removeIf(p -> spawned.contains(p) && !(p instanceof Bot));
         spawned.clear();
         humanPackets.clear();
@@ -987,6 +995,7 @@ public final class SelfTest {
         list.addAll(warfareFlightFeedbackScenarios(y));
         list.addAll(warfareOrdnanceScenarios(y));
         list.addAll(warfareNavigationScenarios(y));
+        list.addAll(warfareGroundScenarios(y));
         list.addAll(warfareMissileScenarios(y));
         return list;
     }
@@ -1261,6 +1270,137 @@ public final class SelfTest {
         }, () -> lane[0] && apart[0] && disabled[0] && airHeight[0] > 6 && airHeight[1] > 6
                 && airHits[0].contains(airPair.get(0).getUUID()) && airHits[0].contains(airPair.get(1).getUUID())
                 && airBodies.stream().allMatch(body -> vehicleHealth(body) > 0), 1400, true));
+        return list;
+    }
+
+    private List<Scenario> warfareGroundScenarios(int y) {
+        List<Scenario> list = new ArrayList<>(); var war = legacy().getSkills().warfare(); var crew = war.crew();
+        Bot[] bridgeDriver = {null}; Entity[] bridgeTank = {null}; boolean[] below = {true}, crossed = {false};
+        list.add(new Scenario("warfare ground tank follows the road below a solid bridge without leaving its corridor", () -> {
+            warfareFlatArena(21080, -25, 21240, 25, y); run("bot settings setgoal none");
+            for (int x = 21100; x <= 21220; x++) for (int h = 0; h < 6; h++) {
+                setBlock(x, y + h, -8, Blocks.BEDROCK.defaultBlockState()); setBlock(x, y + h, 8, Blocks.BEDROCK.defaultBlockState());
+            }
+            for (int x = 21145; x <= 21175; x++) for (int z = -8; z <= 8; z++) setBlock(x, y + 4, z, Blocks.BEDROCK.defaultBlockState());
+            bridgeDriver[0] = vehicleBot("BridgeRoad", 10, 21118.5, y, 2.5); bridgeTank[0] = spawnVehicle("m_1a_2", 21120.5, y, 0.5, -90);
+            crew.board(bridgeDriver[0], bridgeTank[0], 0); crew.go(bridgeDriver[0], new Vec3(21205.5, y, 0.5));
+            track(() -> { below[0] &= bridgeTank[0].getY() < y + 1 && Math.abs(bridgeTank[0].getZ()) < 3 && vehicleHealth(bridgeTank[0]) >= 490;
+                crossed[0] |= bridgeTank[0].getX() > 21160 && bridgeTank[0].getX() < 21170;
+                if (bridgeDriver[0].getAliveTicks() % 160 == 0) LOGGER.info("[SelfTest] Ground bridge pos={} health={} below={} state={}", bridgeTank[0].position(), vehicleHealth(bridgeTank[0]), below[0], war.describe(bridgeDriver[0])); });
+        }, () -> bridgeTank[0].position().subtract(new Vec3(21205.5, y, 0.5)).horizontalDistance() < 4 && crossed[0] && below[0] && bridgeDriver[0].getVehicle() == bridgeTank[0], 1200, true));
+        Bot[] rampDriver = {null}; Entity[] rampTank = {null}; double[] climbed = {0}; boolean[] supported = {true};
+        list.add(new Scenario("warfare ground tank climbs six native one-block road steps and reaches the upper platform", () -> {
+            warfareFlatArena(21300, -25, 21460, 25, y); run("bot settings setgoal none");
+            for (int x = 21335; x <= 21440; x++) for (int z = -12; z <= 12; z++) for (int h = 0; h < Math.min(6, 1 + (x - 21335) / 12); h++) setBlock(x, y + h, z, Blocks.BEDROCK.defaultBlockState());
+            rampDriver[0] = vehicleBot("RoadSteps", 10, 21318.5, y, 2.5); rampTank[0] = spawnVehicle("m_1a_2", 21320.5, y, 0.5, -90);
+            crew.board(rampDriver[0], rampTank[0], 0); crew.go(rampDriver[0], new Vec3(21425.5, y + 6, 0.5));
+            track(() -> { climbed[0] = Math.max(climbed[0], rampTank[0].getY() - y); supported[0] &= rampTank[0].getY() >= y - 0.5 && Math.abs(rampTank[0].getZ()) < 7 && vehicleHealth(rampTank[0]) >= 490;
+                if (rampDriver[0].getAliveTicks() % 160 == 0) LOGGER.info("[SelfTest] Ground steps pos={} health={} supported={} state={}", rampTank[0].position(), vehicleHealth(rampTank[0]), supported[0], war.describe(rampDriver[0])); });
+        }, () -> rampTank[0].position().subtract(new Vec3(21425.5, y + 6, 0.5)).horizontalDistance() < 4 && rampTank[0].getY() >= y + 5.5 && climbed[0] >= 5.5 && supported[0] && rampDriver[0].getVehicle() == rampTank[0], 1400, true));
+        Bot[] cornerDriver = {null}; Entity[] cornerTank = {null}; boolean[] street = {true}, turn = {false};
+        list.add(new Scenario("warfare ground tank brakes turns through an L street and reaches the actual destination", () -> {
+            warfareFlatArena(21500, -25, 21620, 90, y); run("bot settings setgoal none");
+            for (int x = 21510; x <= 21585; x++) for (int z = -10; z <= 70; z++) {
+                boolean road = x <= 21570 && z >= -7 && z <= 7 || x >= 21557 && x <= 21570 && z >= -7 && z <= 60;
+                if (!road) for (int h = 0; h < 4; h++) setBlock(x, y + h, z, Blocks.BEDROCK.defaultBlockState());
+            }
+            cornerDriver[0] = vehicleBot("StreetTurn", 10, 21518.5, y, 2.5); cornerTank[0] = spawnVehicle("m_1a_2", 21520.5, y, 0.5, -90);
+            crew.board(cornerDriver[0], cornerTank[0], 0); crew.go(cornerDriver[0], new Vec3(21563.5, y, 53.5));
+            track(() -> { street[0] &= vehicleHealth(cornerTank[0]) >= 490 && cornerTank[0].getY() < y + 1; turn[0] |= war.describe(cornerDriver[0]).contains("TURN");
+                if (cornerDriver[0].getAliveTicks() % 160 == 0) LOGGER.info("[SelfTest] Ground corner pos={} health={} street={} turn={} state={}", cornerTank[0].position(), vehicleHealth(cornerTank[0]), street[0], turn[0], war.describe(cornerDriver[0])); });
+        }, () -> cornerTank[0].position().subtract(new Vec3(21563.5, y, 53.5)).horizontalDistance() < 4 && street[0] && cornerDriver[0].getVehicle() == cornerTank[0], 1800, true));
+        Bot[] wheelDriver = {null}; Entity[] wheelCarrier = {null}; boolean[] wheelStreet = {true}, wheelTurn = {false};
+        list.add(new Scenario("warfare ground wheel armor steers through an L street and reaches the actual destination", () -> {
+            warfareFlatArena(21500, -25, 21620, 90, y); run("bot settings setgoal none");
+            for (int x = 21510; x <= 21585; x++) for (int z = -10; z <= 70; z++) {
+                boolean road = x <= 21570 && z >= -7 && z <= 7 || x >= 21557 && x <= 21570 && z >= -7 && z <= 60;
+                if (!road) for (int h = 0; h < 4; h++) setBlock(x, y + h, z, Blocks.BEDROCK.defaultBlockState());
+            }
+            wheelDriver[0] = vehicleBot("WheelStreet", 10, 21518.5, y, 2.5); wheelCarrier[0] = spawnVehicle("lav_ad", 21520.5, y, 0.5, -90);
+            crew.board(wheelDriver[0], wheelCarrier[0], 0); crew.go(wheelDriver[0], new Vec3(21563.5, y, 53.5));
+            track(() -> { wheelStreet[0] &= vehicleHealth(wheelCarrier[0]) >= 290 && wheelCarrier[0].getY() < y + 1; wheelTurn[0] |= war.describe(wheelDriver[0]).contains("TURN");
+                if (wheelDriver[0].getAliveTicks() % 160 == 0) LOGGER.info("[SelfTest] Ground wheel corner pos={} yaw={} velocity={} health={} wheelStreet={} wheelTurn={} state={}", wheelCarrier[0].position(), wheelCarrier[0].getYRot(), wheelCarrier[0].getDeltaMovement(), vehicleHealth(wheelCarrier[0]), wheelStreet[0], wheelTurn[0], war.describe(wheelDriver[0])); });
+        }, () -> wheelCarrier[0].position().subtract(new Vec3(21563.5, y, 53.5)).horizontalDistance() < 4 && wheelStreet[0] && wheelDriver[0].getVehicle() == wheelCarrier[0], 1800, true));
+        Bot[] turnDriver = {null}; Entity[] turnCarrier = {null}; boolean[] turned = {false}, turnSafe = {true};
+        list.add(new Scenario("warfare ground wheel armor makes a native driving U turn toward a goal behind it", () -> {
+            warfareFlatArena(21900, -70, 22060, 70, y); run("bot settings setgoal none");
+            turnDriver[0] = vehicleBot("WheelUTurn", 10, 21998.5, y, 2.5); turnCarrier[0] = spawnVehicle("lav_ad", 22000.5, y, 0.5, -90);
+            crew.board(turnDriver[0], turnCarrier[0], 0); crew.go(turnDriver[0], new Vec3(21940.5, y, 0.5));
+            track(() -> { turned[0] |= Math.abs(net.minecraft.util.Mth.wrapDegrees(turnCarrier[0].getYRot() + 90)) > 120;
+                turnSafe[0] &= vehicleHealth(turnCarrier[0]) >= 290 && turnCarrier[0].getY() >= y - 0.5;
+                if (turnDriver[0].getAliveTicks() % 160 == 0) LOGGER.info("[SelfTest] Ground U turn pos={} yaw={} health={} state={}", turnCarrier[0].position(), turnCarrier[0].getYRot(), vehicleHealth(turnCarrier[0]), war.describe(turnDriver[0])); });
+        }, () -> turnCarrier[0].position().subtract(new Vec3(21940.5, y, 0.5)).horizontalDistance() < 4 && turned[0] && turnSafe[0] && turnDriver[0].getVehicle() == turnCarrier[0], 1400, true));
+        List<Bot> heavyCrew = new ArrayList<>(); Entity[] heavyTank = {null}; boolean[] heavySafe = {true};
+        list.add(new Scenario("warfare ground YX100 crew drives across open ground on native track controls", () -> {
+            warfareFlatArena(22100, -30, 22280, 30, y); run("bot settings setgoal none");
+            heavyTank[0] = spawnVehicle("yx_100", 22130.5, y, 0.5, -90);
+            for (int i = 0; i < 3; i++) { Bot b = vehicleBot("HeavyRoad" + i, 10, 22128.5, y, -3.5 + i * 4); heavyCrew.add(b); crew.board(b, heavyTank[0], i); }
+            crew.go(heavyCrew.getFirst(), new Vec3(22235.5, y, 0.5));
+            track(() -> { heavySafe[0] &= vehicleHealth(heavyTank[0]) >= 790 && heavyTank[0].getY() >= y - 0.5;
+                if (heavyCrew.getFirst().getAliveTicks() % 120 == 0) LOGGER.info("[SelfTest] Ground YX100 pos={} health={} shape={} state={}", heavyTank[0].position(), vehicleHealth(heavyTank[0]), war.vessel(heavyTank[0]).footprint(), war.describe(heavyCrew.getFirst())); });
+        }, () -> heavyTank[0].position().subtract(new Vec3(22235.5, y, 0.5)).horizontalDistance() < 4 && heavySafe[0] && heavyCrew.stream().allMatch(b -> b.getVehicle() == heavyTank[0]), 900, true));
+        Bot[] heavyHunter = {null}; Entity[] hunterTank = {null}; Husk[] elevated = {null}; boolean[] approaches = {false};
+        list.add(new Scenario("warfare ground YX100 damaged native tank approaches an elevated hostile without a no route deadlock", () -> {
+            warfareFlatArena(22300, -30, 22450, 30, y); run("bot settings setgoal nearesthostile");
+            heavyHunter[0] = vehicleBot("HeavyAirThreat", 10, 22318.5, y, 2.5); heavyHunter[0].profileAbilities().put("vehicleweapons", false);
+            hunterTank[0] = spawnVehicle("yx_100", 22320.5, y, 0.5, -90);
+            try { hunterTank[0].getClass().getMethod("setHealth", float.class).invoke(hunterTank[0], 360f); } catch (ReflectiveOperationException ex) { throw new IllegalStateException(ex); }
+            elevated[0] = spawnHusk(22400.5, y + 35, 0.5, 500, false); elevated[0].setNoGravity(true); crew.board(heavyHunter[0], hunterTank[0], 0);
+            track(() -> { approaches[0] |= war.describe(heavyHunter[0]).contains("APPROACH");
+                if (heavyHunter[0].getAliveTicks() % 120 == 0) LOGGER.info("[SelfTest] Ground YX100 air target pos={} target={} health={} state={}", hunterTank[0].position(), elevated[0].position(), vehicleHealth(hunterTank[0]), war.describe(heavyHunter[0])); });
+        }, () -> hunterTank[0].getX() > 22355 && approaches[0] && vehicleHealth(hunterTank[0]) >= 350 && heavyHunter[0].getVehicle() == hunterTank[0], 700, true));
+        Bot[] heightDriver = {null}; Entity[] heightTank = {null}; boolean[] heightStopped = {true}; int[] heightReports = {0};
+        list.add(new Scenario("warfare ground unreachable elevated waypoint brakes instead of driving on a zero horizontal vector", () -> {
+            warfareFlatArena(22500, -20, 22570, 20, y); run("bot settings setgoal none");
+            heightDriver[0] = vehicleBot("BadGroundHeight", 10, 22528.5, y, 2.5); heightTank[0] = spawnVehicle("m_1a_2", 22530.5, y, 0.5, -90);
+            crew.board(heightDriver[0], heightTank[0], 0); crew.go(heightDriver[0], new Vec3(22530.5, y + 12, 0.5));
+            track(() -> { heightStopped[0] &= heightTank[0].position().subtract(new Vec3(22530.5, y, 0.5)).horizontalDistance() < 1 && vehicleHealth(heightTank[0]) >= 490;
+                if (war.describe(heightDriver[0]).contains("GOAL_HEIGHT_BLOCKED") && war.describe(heightDriver[0]).contains("terrain=GOAL_HEIGHT@22530")) heightReports[0]++; });
+        }, () -> heightReports[0] >= 80 && heightStopped[0] && heightDriver[0].getVehicle() == heightTank[0], 180, true));
+        Bot[] blockedDriver = {null}; Entity[] blockedTank = {null}; boolean[] closed = {false}, replanned = {false}, intact = {true}; double[] detour = {0}; int[] held = {0}; boolean[] reported = {false};
+        list.add(new Scenario("warfare ground moving tank brakes and replans when a new wall closes its road", () -> {
+            warfareFlatArena(21700, -45, 21840, 45, y); run("bot settings setgoal none");
+            blockedDriver[0] = vehicleBot("RoadClosure", 10, 21718.5, y, 2.5); blockedTank[0] = spawnVehicle("m_1a_2", 21720.5, y, 0.5, -90);
+            crew.board(blockedDriver[0], blockedTank[0], 0); crew.go(blockedDriver[0], new Vec3(21810.5, y, 0.5));
+            track(() -> {
+                if (!closed[0] && blockedTank[0].getX() > 21730) { closed[0] = true; for (int x = 21750; x <= 21751; x++) for (int z = -10; z <= 10; z++) for (int h = 0; h < 4; h++) setBlock(x, y + h, z, Blocks.BEDROCK.defaultBlockState()); }
+                if (closed[0]) { detour[0] = Math.max(detour[0], Math.abs(blockedTank[0].getZ())); replanned[0] |= war.describe(blockedDriver[0]).contains("DRIVING_ROUTE"); reported[0] |= war.describe(blockedDriver[0]).contains("terrain="); }
+                intact[0] &= vehicleHealth(blockedTank[0]) >= 490;
+                held[0] = blockedTank[0].position().subtract(new Vec3(21810.5, y, 0.5)).horizontalDistance() < 4 ? held[0] + 1 : 0;
+                if (blockedDriver[0].getAliveTicks() % 160 == 0) LOGGER.info("[SelfTest] Ground closure pos={} health={} detour={} state={}", blockedTank[0].position(), vehicleHealth(blockedTank[0]), detour[0], war.describe(blockedDriver[0]));
+            });
+        }, () -> closed[0] && replanned[0] && reported[0] && detour[0] > 15 && intact[0] && held[0] >= 40 && blockedTank[0].position().subtract(new Vec3(21810.5, y, 0.5)).horizontalDistance() < 4 && blockedDriver[0].getVehicle() == blockedTank[0], 1500, true));
+        Bot[] assaultDriver = {null}; Entity[] assaultTank = {null}; Husk[] assaultTarget = {null};
+        boolean[] advancing = {false}, pausing = {false}, repositioning = {false}, assaultSafe = {true}; double[] advance = {0}, laterTravel = {0}; Vec3[] pauseAt = {null};
+        list.add(new Scenario("warfare ground active assault advances inside weapon range pauses and physically repositions", () -> {
+            warfareFlatArena(22600, -60, 22750, 60, y); run("bot settings setgoal nearesthostile");
+            assaultDriver[0] = vehicleBot("ActiveAssault", 10, 22618.5, y, 2.5); assaultDriver[0].profileAbilities().put("vehicleweapons", false);
+            assaultTank[0] = spawnVehicle("m_1a_2", 22620.5, y, 0.5, -90); assaultTarget[0] = spawnHusk(22664.5, y, 0.5, 10000, false);
+            crew.board(assaultDriver[0], assaultTank[0], 0);
+            track(() -> {
+                String state = war.describe(assaultDriver[0]); advancing[0] |= state.contains("ATTACK_APPROACH"); repositioning[0] |= state.contains("ATTACK_REPOSITION");
+                if (state.contains("ATTACK_FIRE_PAUSE")) { pausing[0] = true; if (pauseAt[0] == null) pauseAt[0] = assaultTank[0].position(); }
+                if (pauseAt[0] != null) laterTravel[0] = Math.max(laterTravel[0], assaultTank[0].position().subtract(pauseAt[0]).horizontalDistance());
+                advance[0] = Math.max(advance[0], assaultTank[0].getX() - 22620.5); assaultSafe[0] &= vehicleHealth(assaultTank[0]) >= 490;
+                if (assaultDriver[0].getAliveTicks() % 120 == 0) LOGGER.info("[SelfTest] Active assault pos={} advance={} laterTravel={} health={} state={}", assaultTank[0].position(), advance[0], laterTravel[0], vehicleHealth(assaultTank[0]), state);
+            });
+        }, () -> advancing[0] && pausing[0] && repositioning[0] && advance[0] > 15 && laterTravel[0] > 8 && assaultSafe[0]
+                && assaultDriver[0].getVehicle() == assaultTank[0], 700, true));
+        Bot[] interceptDriver = {null}; Entity[] interceptTank = {null}, movingArmor = {null}; boolean[] intercepting = {false}, interceptSafe = {true}; double[] nearest = {1000}, enemyTravel = {0};
+        list.add(new Scenario("warfare ground active interception closes on a crossing armor driven by native input", () -> {
+            warfareFlatArena(22880, -125, 23080, 240, y); run("bot settings setgoal nearesthostile");
+            interceptDriver[0] = vehicleBot("ActiveIntercept", 10, 22918.5, y, 2.5); interceptDriver[0].profileAbilities().put("vehicleweapons", false);
+            interceptTank[0] = spawnVehicle("m_1a_2", 22920.5, y, 0.5, -90); movingArmor[0] = spawnVehicle("lav_ad", 22990.5, y, -90.5, 0);
+            spawnHusk(22990.5, y, -90.5, 10000, true).startRiding(movingArmor[0], true); crew.board(interceptDriver[0], interceptTank[0], 0);
+            track(() -> {
+                try { movingArmor[0].getClass().getMethod("processInput", short.class).invoke(movingArmor[0], (short) 4); } catch (ReflectiveOperationException ex) { throw new IllegalStateException(ex); }
+                enemyTravel[0] = movingArmor[0].getZ() + 90.5; intercepting[0] |= war.describe(interceptDriver[0]).contains("ATTACK_INTERCEPT");
+                if (enemyTravel[0] > 40) nearest[0] = Math.min(nearest[0], movingArmor[0].position().subtract(interceptTank[0].position()).horizontalDistance());
+                interceptSafe[0] &= vehicleHealth(interceptTank[0]) >= 490 && vehicleHealth(movingArmor[0]) >= 290;
+                if (interceptDriver[0].getAliveTicks() % 120 == 0) LOGGER.info("[SelfTest] Active intercept hunter={} enemy={} enemyTravel={} nearest={} health={},{} state={}", interceptTank[0].position(), movingArmor[0].position(), enemyTravel[0], nearest[0], vehicleHealth(interceptTank[0]), vehicleHealth(movingArmor[0]), war.describe(interceptDriver[0]));
+            });
+        }, () -> intercepting[0] && enemyTravel[0] > 40 && nearest[0] < 40 && interceptTank[0].getX() > 22940 && interceptTank[0].getZ() > 10
+                && interceptSafe[0] && interceptDriver[0].getVehicle() == interceptTank[0], 600, true));
         return list;
     }
 
@@ -2145,6 +2285,7 @@ public final class SelfTest {
                     farthest[0] = Math.max(farthest[0], searchingTank[0].getX());
                     if (warfare.describe(search[0]).contains("vehiclePilot=SEARCH_LAST_SEEN")) { searching[0] = true; returned[0] = Math.max(returned[0], farthest[0] - searchingTank[0].getX()); }
                 }
+                if (search[0].getAliveTicks() % 40 == 0) LOGGER.info("[SelfTest] Last seen return tank={} yaw={} motion={} target={} erased={} searching={} returned={} farthest={} health={} state={}", searchingTank[0].position(), searchingTank[0].getYRot(), searchingTank[0].getDeltaMovement(), lost[0].position(), erased[0], searching[0], returned[0], farthest[0], vehicleHealth(searchingTank[0]), warfare.describe(search[0]));
             });
         }, () -> erased[0] && searching[0] && returned[0] > 8 && search[0].isPassenger(), 500, true));
 
@@ -2156,13 +2297,16 @@ public final class SelfTest {
             track(() -> { flew[0] |= boundedHeli[0].getY() > y + 6; stayed[0] &= level.getWorldBorder().isWithinBounds(boundedHeli[0].getBoundingBox()) && level.getWorldBorder().isWithinBounds(boundedPilot[0].getBoundingBox()); });
         }, () -> boundedPilot[0].getAliveTicks() >= 420 && flew[0] && stayed[0] && boundedPilot[0].isAlive(), 440, true));
 
-        List<Bot> twoCrews = new ArrayList<>(); Entity[] twoHelis = new Entity[2]; int[] assigned = {0, 0};
+        List<Bot> twoCrews = new ArrayList<>(); Entity[] twoHelis = new Entity[2]; int[] assigned = {0, 0}; boolean[] crewSupported = {true};
         list.add(new Scenario("warfare flight feedback filling a second vehicle preserves the first crew reservations", () -> {
             warfareFlatArena(12590, -25, 12665, 25, y); run("bot settings setgoal none");
+            for (int x = 12626; x <= 12628; x++) for (int z = 0; z <= 2; z++) for (int depth = 1; depth <= 3; depth++) setBlock(x, y - depth, z, Blocks.AIR.defaultBlockState());
             twoHelis[0] = spawnVehicle("ah_6", 12610.5, y, 0.5, 0); twoHelis[1] = spawnVehicle("ah_6", 12635.5, y, 0.5, 0);
             for (int i = 0; i < 6; i++) twoCrews.add(vehicleBot("MultiCrew" + i, 10, 12605.5 + i, y, -7.5));
             testTeam("multi_crew", twoCrews.toArray(Bot[]::new)); assigned[0] = crew.boardCrew(twoCrews.getFirst(), twoHelis[0]); assigned[1] = crew.boardCrew(twoCrews.get(4), twoHelis[1]);
-        }, () -> assigned[0] == 4 && assigned[1] == 2 && twoCrews.subList(0, 4).stream().allMatch(b -> b.getVehicle() == twoHelis[0])
+            track(() -> crewSupported[0] &= twoCrews.stream().allMatch(b -> b.getY() >= y - 0.5));
+            track(() -> { if (twoCrews.getFirst().getAliveTicks() % 80 == 0) LOGGER.info("[SelfTest] Second crew assigned={},{} vehicles={},{} health={},{} members={}", assigned[0], assigned[1], twoHelis[0].position(), twoHelis[1].position(), vehicleHealth(twoHelis[0]), vehicleHealth(twoHelis[1]), twoCrews.stream().map(b -> b.position() + " floor=" + level.getBlockState(b.blockPosition().below()) + " " + warfare.describe(b)).toList()); });
+        }, () -> crewSupported[0] && assigned[0] == 4 && assigned[1] == 2 && twoCrews.subList(0, 4).stream().allMatch(b -> b.getVehicle() == twoHelis[0])
                 && twoCrews.subList(4, 6).stream().allMatch(b -> b.getVehicle() == twoHelis[1]), 350, true));
 
         Bot[] cautious = {null}; Entity[] evasive = {null}; boolean[] flanked = {false}, locked = {false}, avoided = {false}; int[] flares = {0};

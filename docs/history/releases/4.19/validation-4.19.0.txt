@@ -1,0 +1,13 @@
+4.19.0-BETA preseal validation
+Final full native regression: NOT RERUN (102 cases)
+This version base regression: NOT RUN (130 cases)
+Earlier source full native: 99 PASS / 3 FAIL / 102
+Intermediate source targeted: 14 PASS / 1 FAIL / 15
+Final source targeted boarding: 3 PASS / 1 FAIL / 4
+Known failure: warfare flight feedback filling a second vehicle preserves the first crew reservations (fixed three-block pit; second crew boarding timeout)
+Minimum build: NeoForge 21.1.1 / Java 21 / BUILD SUCCESSFUL
+Frozen source/build files: 114
+Final targeted native / minimum / JAR classes: 180, byte-identical
+JAR bytes: 778249
+JAR SHA256: 4408F1E5524D6FE4129664A9C7CA1B3F06856536B90C3FF1D87BB7943CCC8D20
+No foreign mod content bundled. Earlier sealed artifacts preserved.

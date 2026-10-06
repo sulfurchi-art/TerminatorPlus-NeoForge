@@ -1,0 +1,47 @@
+{
+  "jar": "C:\\Users\\13703\\Documents\\Codex\\2026-10-04\\http-200-https-github-com-sulfurchi\\outputs\\TerminatorPlus-NeoForge-1.21.1-4.19.0-BETA.jar",
+  "zip": "C:\\Users\\13703\\Documents\\Codex\\2026-10-04\\http-200-https-github-com-sulfurchi\\outputs\\TerminatorPlus-NeoForge-4.19.0-内测包.zip",
+  "jar_bytes": 778249,
+  "jar_sha256": "4408F1E5524D6FE4129664A9C7CA1B3F06856536B90C3FF1D87BB7943CCC8D20",
+  "zip_sha256": "6AF85E48BE687E863DF82FD573180F53B2C26E9C8C5045EE807AE204EC641DBF",
+  "archive_files": 39,
+  "frozen_files": 114,
+  "compiled_classes": 180,
+  "earlier_source_native_full": {
+    "log": "ai-hardness-4.19-warfare-regression-1.log",
+    "passed": 99,
+    "failed": [
+      "warfare flight feedback vehicle returns to an observed enemy point after target loss",
+      "warfare flight feedback filling a second vehicle preserves the first crew reservations",
+      "warfare navigation tank avoids a water-filled trench with track support checks"
+    ],
+    "total": 102
+  },
+  "intermediate_source_targeted": {
+    "log": "ai-hardness-4.19-regression-fixed.log",
+    "passed": 14,
+    "failed": [
+      "warfare flight feedback filling a second vehicle preserves the first crew reservations"
+    ],
+    "total": 15
+  },
+  "final_source_targeted": {
+    "log": "ai-hardness-4.19-boarding-pit-2.log",
+    "passed": 3,
+    "failed": [
+      "warfare flight feedback filling a second vehicle preserves the first crew reservations"
+    ],
+    "total": 4
+  },
+  "final_full_native_regression_pending": true,
+  "base_regression_not_run": true,
+  "native_targeted_and_minimum_class_bytes_match": true,
+  "jar_classes_byte_identical": true,
+  "archive_crc_verified": true,
+  "old_artifacts_preserved": [
+    "TerminatorPlus-NeoForge-1.21.1-4.18.0-BETA.jar",
+    "TerminatorPlus-NeoForge-4.18.0-内测包.zip",
+    "TerminatorPlus-NeoForge-1.21.1-4.17.0-BETA.jar",
+    "TerminatorPlus-NeoForge-4.17.0-内测包.zip"
+  ]
+}
