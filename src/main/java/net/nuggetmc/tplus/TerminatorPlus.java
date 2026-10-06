@@ -73,6 +73,7 @@ public class TerminatorPlus {
         bus.addListener(net.neoforged.bus.api.EventPriority.LOWEST, this::onPlayerAttack);
         bus.addListener(this::onCoverBroken);
         bus.addListener(this::onCoverPlaced);
+        bus.addListener(this::onMissileWarning);
         bus.addListener(this::onRegisterCommands);
         bus.addListener(this::onPermissionNodes);
         bus.addListener(this::onPlayerLoggedIn);
@@ -161,6 +162,12 @@ public class TerminatorPlus {
     private void onCoverBroken(net.neoforged.neoforge.event.level.BlockEvent.BreakEvent event) {
         if (manager != null && !event.isCanceled() && event.getLevel() instanceof net.minecraft.server.level.ServerLevel world)
             ((net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent) manager.getAgent()).getSkills().invalidateCover(world, event.getPos());
+    }
+    private void onMissileWarning(net.neoforged.neoforge.event.PlayLevelSoundEvent.AtPosition event) {
+        if (manager == null || event.isCanceled() || event.getSound() == null || !(event.getLevel() instanceof net.minecraft.server.level.ServerLevel level)) return;
+        var id = event.getSound().value().getLocation();
+        if (id.getNamespace().equals("superbwarfare") && (id.getPath().equals("locked_warning") || id.getPath().equals("locking_warning")))
+            ((net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent) manager.getAgent()).getSkills().missiles().warning(level, event.getPosition(), level.getServer().getTickCount());
     }
     private void onCoverPlaced(net.neoforged.neoforge.event.level.BlockEvent.EntityPlaceEvent event) {
         if (manager != null && !event.isCanceled() && event.getLevel() instanceof net.minecraft.server.level.ServerLevel world)

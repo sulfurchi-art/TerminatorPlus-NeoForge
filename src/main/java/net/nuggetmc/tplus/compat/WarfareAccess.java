@@ -15,6 +15,8 @@ public interface WarfareAccess {
     double meleeDamage(Entity vehicle, net.minecraft.world.entity.LivingEntity shooter);
     Vessel vessel(Entity entity);
     Ordnance ordnance();
+    List<Missile> missiles(Entity target);
+    record Missile(Entity entity, boolean topAttack, double radius) {}
 
     record Payload(boolean kamikaze, int capacity, double radius, double damage, Vec3 dropPosition) {}
     interface Drone {
@@ -103,6 +105,7 @@ public interface WarfareAccess {
         boolean boltPending();
         void bolt();
         void zoom(boolean zoom);
+        boolean zooming();
         void fireMode(boolean automatic, boolean topAttack);
         void shoot(Bot bot, double spread, boolean zoom, Entity lockedTarget);
     }

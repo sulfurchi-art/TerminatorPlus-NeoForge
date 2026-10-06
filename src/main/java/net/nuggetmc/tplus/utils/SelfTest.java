@@ -987,6 +987,177 @@ public final class SelfTest {
         list.addAll(warfareFlightFeedbackScenarios(y));
         list.addAll(warfareOrdnanceScenarios(y));
         list.addAll(warfareNavigationScenarios(y));
+        list.addAll(warfareMissileScenarios(y));
+        return list;
+    }
+
+    private Bot missileBot(String name, int difficulty, double x, int y, double z) {
+        Bot bot = infantry(name, difficulty, x, y, z);
+        bot.profileAbilities().put("guns", false); bot.profileAbilities().put("missiledefense", true);
+        return bot;
+    }
+    private Entity fireJavelin(Bot shooter, Entity target, boolean top) {
+        ItemStack stack = loadedGun("javelin", 1);
+        shooter.getInventory().items.set(0, stack);
+        shooter.faceLocation(target.getBoundingBox().getCenter());
+        var gun = legacy().getSkills().warfare().access().gun(stack);
+        gun.zoom(true); gun.fireMode(false, top);
+        Entity[] emitted = {null};
+        java.util.function.Consumer<net.neoforged.neoforge.event.entity.EntityJoinLevelEvent> listener = event -> {
+            if (event.getEntity() instanceof net.minecraft.world.entity.projectile.Projectile projectile && projectile.getOwner() == shooter
+                    && event.getEntity().getClass().getName().endsWith("JavelinMissileEntity")) emitted[0] = event.getEntity();
+        };
+        NeoForge.EVENT_BUS.addListener(listener);
+        try { gun.shoot(shooter, 0, true, target); } finally { NeoForge.EVENT_BUS.unregister(listener); }
+        if (emitted[0] == null || gun.ammo() != 0) throw new IllegalStateException("Native Javelin failed to emit or debit its actual magazine");
+        Entity actual = emitted[0];
+        if (legacy().getSkills().warfare().access().missiles(target).stream().noneMatch(m -> m.entity() == actual && m.topAttack() == top))
+            throw new IllegalStateException("Native Javelin did not select its requested actual attack mode");
+        try { LOGGER.info("[SelfTest] Actual Javelin top={} native life={} ticks", top, actual.getClass().getMethod("getLife").invoke(actual)); }
+        catch (ReflectiveOperationException e) { throw new IllegalStateException(e); }
+        spawned.add(emitted[0]); return emitted[0];
+    }
+    private List<Scenario> warfareMissileScenarios(int y) {
+        List<Scenario> list = new ArrayList<>(); var skills = legacy().getSkills(); var defense = skills.missiles();
+        Bot[] naked = {null}, baselineShooter = {null}; Entity[] baselineMissile = {null};
+        list.add(new Scenario("warfare missile baseline unprotected bot is killed by an actual native Javelin", () -> {
+            warfareFlatArena(16950, -40, 17120, 40, y); run("bot settings setgoal none");
+            naked[0] = missileBot("NoDefense", 9, 17060.5, y, 0.5); naked[0].profileAbilities().put("missiledefense", false);
+            baselineShooter[0] = infantry("BaselineLauncher", 7, 16980.5, y, 0.5); baselineShooter[0].profileAbilities().put("guns", false);
+            track(() -> { if (naked[0].getAliveTicks() == 80) baselineMissile[0] = fireJavelin(baselineShooter[0], naked[0], false); });
+        }, () -> baselineMissile[0] != null && !naked[0].isAlive(), 260, true));
+        for (boolean top : new boolean[]{false, true}) {
+            int x = top ? 17500 : 17200;
+            Bot[] protectedBot = {null}, shooter = {null}; Entity[] missile = {null}; boolean[] sealed = {false}, warning = {false}; int[] remaining = {128};
+            list.add(new Scenario("warfare missile " + (top ? "top attack" : "direct attack") + " native Javelin meets a complete finite steel shelter and bot survives", () -> {
+                warfareFlatArena(x - 40, -40, x + 150, 40, y); run("bot settings setgoal none");
+                protectedBot[0] = missileBot("Sheltered" + top, 9, x + 100.5, y, 0.5); protectedBot[0].giveItem(warfareItem("steel_block", 64)); protectedBot[0].giveItem(warfareItem("steel_block", 64));
+                shooter[0] = infantry("NativeLauncher" + top, 7, x + 10.5, y, 0.5); shooter[0].profileAbilities().put("guns", false);
+                java.util.function.Consumer<net.neoforged.neoforge.event.entity.living.LivingDamageEvent.Post> damageLog = event -> {
+                    if (event.getEntity() == protectedBot[0]) LOGGER.info("[SelfTest] Shelter actual damage={} source={} direct={} pos={} blocks={} hp={}", event.getNewDamage(), event.getSource().getMsgId(), event.getSource().getDirectEntity() == null ? null : event.getSource().getDirectEntity().position(), protectedBot[0].position(), defense.placed(protectedBot[0]), protectedBot[0].getHealth());
+                };
+                NeoForge.EVENT_BUS.addListener(damageLog); scenarioHooks.add(() -> NeoForge.EVENT_BUS.unregister(damageLog));
+                track(() -> {
+                    if (protectedBot[0].getAliveTicks() == 80) missile[0] = fireJavelin(shooter[0], protectedBot[0], top);
+                    sealed[0] |= defense.enclosed(protectedBot[0], protectedBot[0].blockPosition());
+                    warning[0] |= skills.warfare().describe(protectedBot[0]).contains("missileAlert=INBOUND");
+                    remaining[0] = protectedBot[0].countItem(warfareItem("steel_block", 1).getItem());
+                    if (protectedBot[0].getAliveTicks() == 100) {
+                        List<BlockPos> missing = new ArrayList<>();
+                        for (int dy = 0; dy <= 3; dy++) for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++)
+                            if (dy <= 2 && (Math.abs(dx) == 2 || Math.abs(dz) == 2) || dy >= 2 && Math.abs(dx) <= 1 && Math.abs(dz) <= 1) {
+                                BlockPos p = new BlockPos(x + 100 + dx, y + dy, dz);
+                                if (!level.getBlockState(p).isCollisionShapeFullBlock(level, p)) missing.add(p);
+                            }
+                        LOGGER.info("[SelfTest] Missing shelter cells={} blocks={}", missing, defense.placed(protectedBot[0]));
+                    }
+                    if (protectedBot[0].getAliveTicks() % 5 == 0 && protectedBot[0].getAliveTicks() >= 80 && protectedBot[0].getAliveTicks() <= 130 || protectedBot[0].getAliveTicks() % 40 == 0) LOGGER.info("[SelfTest] Missile shelter top={} pos={} health={} sealed={} steel={} state={} missile={}", top, protectedBot[0].position(), protectedBot[0].getHealth(), sealed[0], remaining[0], skills.warfare().describe(protectedBot[0]), missile[0] == null ? null : missile[0].position());
+                });
+            }, () -> missile[0] != null && missile[0].isRemoved() && protectedBot[0].getAliveTicks() > 180 && protectedBot[0].isAlive()
+                    && protectedBot[0].getHealth() > 0 && warning[0] && sealed[0] && defense.placed(protectedBot[0]) >= 66 && remaining[0] == 128 - defense.placed(protectedBot[0]), 340, true));
+        }
+        Bot[] houseBot = {null}, houseShooter = {null}; Entity[] houseMissile = {null}; boolean[] found = {false}, houseClosed = {false}; int[] initialHouseCost = {-1};
+        list.add(new Scenario("warfare missile nearby enclosed shelter is reached and its entrance sealed against top attack", () -> {
+            warfareFlatArena(17750, -40, 17930, 40, y); run("bot settings setgoal none");
+            BlockState steel = ((net.minecraft.world.item.BlockItem) warfareItem("steel_block", 1).getItem()).getBlock().defaultBlockState();
+            for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++) for (int h = 0; h <= 2; h++)
+                if (h == 2 || Math.abs(dx) == 2 || Math.abs(dz) == 2) setBlock(17854 + dx, y + h, dz, steel);
+            setBlock(17852, y, 0, Blocks.AIR.defaultBlockState()); setBlock(17852, y + 1, 0, Blocks.AIR.defaultBlockState());
+            houseBot[0] = missileBot("NearbyShelter", 9, 17850.5, y, 0.5); houseBot[0].giveItem(warfareItem("steel_block", 64)); houseBot[0].giveItem(warfareItem("steel_block", 64));
+            houseShooter[0] = infantry("HouseLauncher", 7, 17780.5, y, 0.5); houseShooter[0].profileAbilities().put("guns", false);
+            track(() -> {
+                if (houseBot[0].getAliveTicks() == 80) {
+                    var sound = net.minecraft.core.registries.BuiltInRegistries.SOUND_EVENT.get(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("superbwarfare", "locked_warning"));
+                    level.playSound(null, houseBot[0].getOnPos(), sound, net.minecraft.sounds.SoundSource.PLAYERS, 2, 1);
+                    houseMissile[0] = fireJavelin(houseShooter[0], houseBot[0], true);
+                }
+                found[0] |= skills.warfare().describe(houseBot[0]).contains("SEEK_SHELTER");
+                if (!houseClosed[0] && houseBot[0].getX() > 17854 && defense.enclosed(houseBot[0], houseBot[0].blockPosition())) { houseClosed[0] = true; initialHouseCost[0] = defense.placed(houseBot[0]); }
+                if (houseBot[0].getAliveTicks() % 40 == 0) LOGGER.info("[SelfTest] House shelter pos={} health={} state={} found={} closed={}", houseBot[0].position(), houseBot[0].getHealth(), skills.warfare().describe(houseBot[0]), found[0], houseClosed[0]);
+            });
+        }, () -> houseMissile[0] != null && houseMissile[0].isRemoved() && houseBot[0].getAliveTicks() > 180 && houseBot[0].isAlive()
+                && found[0] && houseClosed[0] && initialHouseCost[0] <= 20
+                && houseBot[0].countItem(warfareItem("steel_block", 1).getItem()) == 128 - defense.placed(houseBot[0]), 340, true));
+        Bot[] scoped = {null}, observer = {null}; ItemStack[] scope = {null}; boolean[] aimed = {false}, released = {false}, unscoped = {false};
+        list.add(new Scenario("warfare missile scoped launcher is an aim warning and cancellation clears temporary shelter", () -> {
+            warfareFlatArena(18000, -40, 18150, 40, y); run("bot settings setgoal none");
+            observer[0] = missileBot("AimWarning", 9, 18100.5, y, 0.5); observer[0].giveItem(warfareItem("steel_block", 64)); observer[0].giveItem(warfareItem("steel_block", 64));
+            scoped[0] = infantry("ScopedLauncher", 7, 18020.5, y, 0.5); scoped[0].profileAbilities().put("guns", false);
+            scope[0] = loadedGun("javelin", 1); scoped[0].getInventory().items.set(0, scope[0]); scoped[0].faceLocation(observer[0].getEyePosition());
+            track(() -> {
+                if (observer[0].getAliveTicks() < 50) unscoped[0] |= defense.placed(observer[0]) == 0;
+                if (observer[0].getAliveTicks() == 80) skills.warfare().access().gun(scope[0]).zoom(true);
+                aimed[0] |= skills.warfare().describe(observer[0]).contains("missileAlert=AIM_WARNING");
+                if (observer[0].getAliveTicks() == 140) { skills.warfare().access().gun(scope[0]).zoom(false); observer[0].profileAbilities().put("missiledefense", false); }
+                if (observer[0].getAliveTicks() > 145) released[0] |= !defense.enclosed(observer[0], observer[0].blockPosition()) && skills.warfare().describe(observer[0]).contains("missileDefense=") == false;
+            });
+        }, () -> observer[0].getAliveTicks() > 150 && observer[0].isAlive() && aimed[0] && unscoped[0] && released[0]
+                && skills.warfare().access().gun(scope[0]).ammo() == 1, 220, true));
+        for (boolean top : new boolean[]{false, true}) for (boolean near : new boolean[]{false, true}) {
+            int x = top ? (near ? 19700 : 19400) : (near ? 18500 : 18200); Bot[] flyer = {null}, launcher = {null}; Entity[] incoming = {null};
+            boolean[] changed = {false}, landed = {false}; double[] traveled = {0}; Vec3[] launchPosition = {null};
+            String mode = top ? "top attack" : "direct attack";
+            list.add(new Scenario("warfare missile elytra " + (near ? "imminent " + mode + " uses a large native maneuver and survives" : "early warning descends lands and survives a real " + mode + " Javelin"), () -> {
+                warfareFlatArena(x - 50, -100, x + 230, 100, y); run("bot settings setgoal none");
+                flyer[0] = missileBot("EvadingFlyer" + near, 9, x + 100.5, y, 0.5);
+                flyer[0].profileAbilities().put("elytra", true); flyer[0].giveItem(new ItemStack(Items.ELYTRA)); flyer[0].giveItem(new ItemStack(Items.FIREWORK_ROCKET, 16)); flyer[0].giveItem(warfareItem("steel_block", 64)); flyer[0].giveItem(warfareItem("steel_block", 64));
+                launcher[0] = infantry("AirLauncher" + near, 7, x + (near ? 70.5 : 10.5), y, 0.5); launcher[0].profileAbilities().put("guns", false);
+                track(() -> {
+                    if (flyer[0].getAliveTicks() == 75) { flyer[0].setPos(x + 100.5, y + (near ? 24 : 12), 0.5); flyer[0].setOnGround(false); flyer[0].setLook(-90, 0); flyer[0].launch(new Vec3(0.8, 0, 0)); flyer[0].startGliding(); }
+                    if (flyer[0].getAliveTicks() == 80) { launchPosition[0] = flyer[0].position(); incoming[0] = fireJavelin(launcher[0], flyer[0], top); }
+                    if (incoming[0] != null) {
+                        String state = skills.warfare().describe(flyer[0]); changed[0] |= state.contains(near ? "missileDefense=EVASIVE" : "missileDefense=DESCEND");
+                        landed[0] |= flyer[0].isBotOnGround(); traveled[0] = Math.max(traveled[0], flyer[0].position().distanceTo(launchPosition[0]));
+                        if (flyer[0].getAliveTicks() % 5 == 0 && flyer[0].getAliveTicks() <= 145 || flyer[0].getAliveTicks() % 40 == 0) LOGGER.info("[SelfTest] Missile flight top={} near={} pos={} hp={} state={} landed={} traveled={} missile={}", top, near, flyer[0].position(), flyer[0].getHealth(), state, landed[0], traveled[0], incoming[0].position());
+                    }
+                });
+            }, () -> incoming[0] != null && incoming[0].isRemoved() && flyer[0].getAliveTicks() > 220 && flyer[0].isAlive()
+                    && changed[0] && traveled[0] > 10 && (near || landed[0]), 600, true));
+        }
+        Bot[] shelterGroup = new Bot[6]; int[] lastPlaced = new int[6], peakPlacement = {0}; boolean[] groupClosed = new boolean[6];
+        list.add(new Scenario("warfare missile six shelters share a fair 24-block tick budget with finite native materials", () -> {
+            warfareFlatArena(20150, -30, 20250, 30, y); run("bot settings setgoal none");
+            for (int i = 0; i < shelterGroup.length; i++) {
+                shelterGroup[i] = missileBot("BudgetShelter" + i, 9, 20170.5 + i * 12, y, 0.5);
+                shelterGroup[i].giveItem(warfareItem("steel_block", 64)); shelterGroup[i].giveItem(warfareItem("steel_block", 64));
+            }
+            track(() -> {
+                int placedThisTick = 0;
+                for (int i = 0; i < shelterGroup.length; i++) {
+                    Bot b = shelterGroup[i];
+                    if (b.getAliveTicks() == 80 || b.getAliveTicks() == 100) {
+                        var sound = net.minecraft.core.registries.BuiltInRegistries.SOUND_EVENT.get(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("superbwarfare", "locked_warning"));
+                        level.playSound(null, b.getOnPos(), sound, net.minecraft.sounds.SoundSource.PLAYERS, 2, 1);
+                    }
+                    int placedNow = defense.placed(b); placedThisTick += placedNow - lastPlaced[i]; lastPlaced[i] = placedNow;
+                    groupClosed[i] |= defense.enclosed(b, b.blockPosition());
+                }
+                peakPlacement[0] = Math.max(peakPlacement[0], placedThisTick);
+            });
+        }, () -> {
+            if (shelterGroup[0].getAliveTicks() < 125 || peakPlacement[0] > 24) return false;
+            for (int i = 0; i < shelterGroup.length; i++) if (!groupClosed[i] || !shelterGroup[i].isAlive() || defense.placed(shelterGroup[i]) < 66
+                    || shelterGroup[i].countItem(warfareItem("steel_block", 1).getItem()) != 128 - defense.placed(shelterGroup[i])) return false;
+            LOGGER.info("[SelfTest] Six missile shelters peak placements={} counts={}", peakPlacement[0], java.util.Arrays.toString(lastPlaced)); return true;
+        }, 220, true));
+        Bot[] heliPilot = {null}, heliLauncher = {null}; Entity[] warnedHeli = {null}, heliMissile = {null}; boolean[] broke = {false}, decoy = {false};
+        list.add(new Scenario("warfare missile helicopter native emergency break and finite decoys survive a real Javelin", () -> {
+            warfareFlatArena(18800, -100, 19070, 100, y); run("bot settings setgoal none");
+            heliPilot[0] = vehicleBot("MissilePilot", 10, 18900.5, y, 2.5); heliPilot[0].profileAbilities().put("missiledefense", true);
+            warnedHeli[0] = spawnVehicle("ah_6", 18902.5, y, 0.5, -90); skills.warfare().crew().board(heliPilot[0], warnedHeli[0], 0);
+            try { warnedHeli[0].getClass().getMethod("setItem", int.class, ItemStack.class).invoke(warnedHeli[0], 0, warfareItem("flying_flare_ammo", 6)); }
+            catch (ReflectiveOperationException e) { throw new IllegalStateException(e); }
+            skills.warfare().crew().go(heliPilot[0], new Vec3(19020.5, y, 0.5));
+            heliLauncher[0] = infantry("HeliLauncher", 7, 18820.5, y, 0.5); heliLauncher[0].profileAbilities().put("guns", false);
+            track(() -> {
+                if (heliMissile[0] == null && heliPilot[0].getAliveTicks() > 80 && warnedHeli[0].getY() > y + 7 && skills.warfare().vessel(warnedHeli[0]).decoys() == 6) heliMissile[0] = fireJavelin(heliLauncher[0], warnedHeli[0], false);
+                broke[0] |= skills.warfare().describe(heliPilot[0]).contains("EVADE_BREAK");
+                if (heliMissile[0] != null) decoy[0] |= skills.warfare().vessel(warnedHeli[0]).decoys() < 6;
+                if (heliPilot[0].getAliveTicks() % 40 == 0) LOGGER.info("[SelfTest] Missile helicopter pos={} hp={} state={} missile={}", warnedHeli[0].position(), vehicleHealth(warnedHeli[0]), skills.warfare().describe(heliPilot[0]), heliMissile[0] == null ? null : heliMissile[0].position());
+            });
+        }, () -> heliMissile[0] != null && heliMissile[0].isRemoved() && heliPilot[0].getAliveTicks() > 550 && vehicleHealth(warnedHeli[0]) > 0
+                && heliPilot[0].getVehicle() == warnedHeli[0] && broke[0] && decoy[0]
+                && skills.warfare().vessel(warnedHeli[0]).decoyItems() < 6, 850, true));
         return list;
     }
 

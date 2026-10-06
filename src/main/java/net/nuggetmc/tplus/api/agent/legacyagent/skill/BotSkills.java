@@ -34,6 +34,7 @@ public class BotSkills {
     private final ShieldDefense defense;
     private final net.nuggetmc.tplus.compat.WarfareSupport warfare;
     private final WarfareTactics ordnance;
+    private final MissileDefense missiles;
 
     public BotSkills(BotManager manager, SkillSettings settings) {
         this.manager = manager;
@@ -51,6 +52,7 @@ public class BotSkills {
         this.defense = new ShieldDefense(this);
         this.warfare = new net.nuggetmc.tplus.compat.WarfareSupport(this);
         this.ordnance = new WarfareTactics(this);
+        this.missiles = new MissileDefense(this);
     }
 
     public SkillSettings settings() {
@@ -78,6 +80,7 @@ public class BotSkills {
     }
 
     public void forget(Terminator bot) {
+        if (bot instanceof Bot b) missiles.forget(b);
         if (bot instanceof Bot b) ordnance.forget(b);
         warfare.forget(bot);
         teams.remove(bot, now());
@@ -88,6 +91,7 @@ public class BotSkills {
     }
 
     public void clear() {
+        missiles.clear();
         ordnance.clear();
         warfare.clear();
         teams.clear();
@@ -105,17 +109,26 @@ public class BotSkills {
     public ChatterSystem chatter() { return chatter; }
     public net.nuggetmc.tplus.compat.WarfareSupport warfare() { return warfare; }
     public WarfareTactics ordnance() { return ordnance; }
+    public MissileDefense missiles() { return missiles; }
+    void cancelForMissile(Bot bot) {
+        BotMemory mem = memory(bot);
+        teams.remove(bot, now());
+        mem.maceDrop = false; mem.bowTicks = 0; mem.feint = BotMemory.Feint.NONE;
+        mem.combo = BotMemory.Combo.NONE; mem.plan = BotMemory.FlightPlan.TRAVEL;
+        mem.flightGoal = null; mem.defendingUntil = 0;
+    }
     public java.util.Collection<Terminator> bots() { return manager.fetch(); }
     public void clearTeamFocus() {
         teams.clear();
         memories.values().forEach(m -> { m.teamRole = BotMemory.TeamRole.NONE; m.guardedAlly = -1; m.rolePoint = null; });
     }
-    public void sweepTemporaryBlocks() { tactics.sweep(); chatter.prune(); if (now() % 20 == 0) teams.sweep(now()); }
+    public void sweepTemporaryBlocks() { tactics.sweep(); missiles.sweep(); chatter.prune(); if (now() % 20 == 0) teams.sweep(now()); }
     public void onPlayerAttack(net.minecraft.server.level.ServerPlayer player, LivingEntity target) { teams.attack(player, target, now()); }
     public void onTeamDamage(LivingEntity victim, LivingEntity attacker) { teams.damage(victim, attacker, now()); }
     @Nullable net.minecraft.server.level.ServerPlayer guardedAlly(Terminator bot) { return teams.ward(bot); }
     public void invalidateCover(net.minecraft.server.level.ServerLevel world, net.minecraft.core.BlockPos position) {
         tactics.invalidate(net.minecraft.core.GlobalPos.of(world.dimension(), position), memories.values());
+        missiles.invalidate(net.minecraft.core.GlobalPos.of(world.dimension(), position));
     }
     public OpponentLearning learning() { return learning; }
     public void saveLearning() throws java.io.IOException {
@@ -302,6 +315,7 @@ public class BotSkills {
             bot.equipTotem();
         }
 
+        if (bot instanceof Bot b && missiles.tick(b, now)) { speech(bot, mem, target, now); return true; }
         if (bot instanceof Bot b && ordnance.tick(b, target, now)) { speech(bot, mem, target, now); return true; }
 
         if (bot instanceof Bot b && warfare.tickCrew(b, target, mem.targetVelocity, now)) {

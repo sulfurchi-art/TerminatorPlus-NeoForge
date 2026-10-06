@@ -97,7 +97,7 @@ public final class WarfareSupport {
         State s = states.get(bot);
         return status + (s == null ? "" : "; shots=" + s.shots + "; coolingGuns=" + s.reloads.size() + (s.held == null ? "; hand idle" :
                 "; " + BuiltInRegistries.ITEM.getKey(s.held.stack().getItem()) + "; ammo=" + s.held.ammo()
-                        + "; reloadTicks=" + reloadRemaining(bot, s.held.stack()) + "; zoom=" + s.zoom + (s.antiRole.isEmpty() ? "" : "; antiTank=" + s.antiRole))) + crew.describe(bot) + skills.ordnance().describe(bot);
+                        + "; reloadTicks=" + reloadRemaining(bot, s.held.stack()) + "; zoom=" + s.zoom + (s.antiRole.isEmpty() ? "" : "; antiTank=" + s.antiRole))) + crew.describe(bot) + skills.ordnance().describe(bot) + skills.missiles().describe(bot);
     }
     public long shots(Bot bot) { State s = states.get(bot); return s == null ? 0 : s.shots; }
     public long lastShot(Bot bot) { State s = states.get(bot); return s == null ? -1 : s.lastShot; }

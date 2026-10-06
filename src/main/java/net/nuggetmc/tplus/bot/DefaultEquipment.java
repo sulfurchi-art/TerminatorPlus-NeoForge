@@ -92,6 +92,7 @@ public final class DefaultEquipment {
         for (int i = 0; i < (level >= 8 ? 3 : level >= 5 ? 2 : 1); i++) inventory.add(sbw(ammo, level == 1 ? 16 : level == 2 ? 32 : 64));
         if (level >= 5) { inventory.add(sbw(level >= 8 ? "aa_12" : "m_870", 1)); inventory.add(sbw("shotgun_ammo", 32 + (level - 5) * 6)); }
         if (level >= 7) { inventory.add(sbw("rpg", 1)); inventory.add(sbw("rpg_rocket_standard", 2 + (level - 7) * 2)); }
+        if (level >= 7) { inventory.add(sbw("steel_block", 64)); inventory.add(sbw("steel_block", 64)); }
         if (level >= 9) { inventory.add(sbw("awm", 1)); inventory.add(sbw("sniper_ammo", level == 10 ? 32 : 16)); }
         if (level >= 4) { inventory.add(sbw("medical_kit", level - 2)); inventory.add(sbw("crust", 8 + (level - 4) * 4)); }
         if (level >= 5) inventory.add(sbw("m18_smoke_grenade", level - 3));

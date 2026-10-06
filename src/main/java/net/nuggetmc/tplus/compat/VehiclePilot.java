@@ -192,12 +192,24 @@ final class VehiclePilot {
         if (land && e.onGround()) { f.phase = "LANDED"; vessel.input(bot, 32, 0, 0); return true; }
         Vec3 goal;
         boolean incoming = vessel.threatened() || now < f.hurtUntil;
+        var missile = skills.missiles().threat(bot, now);
+        boolean emergency = missile != null;
+        boolean emergencyBreak = emergency && missile.missile() != null
+                && missile.impactTicks() < Math.max(0, pos.y - groundHeight(e, pos)) / 0.2 + 20;
+        incoming |= emergency;
         boolean landing = land || vessel.energy() < Math.min(20000, vessel.maxEnergy() / 100);
+        if (emergency && !emergencyBreak) landing = true;
         if (landing) {
             // Pick a loaded clear patch below/near the aircraft; avoid an automatic teleport or midair ejection.
             goal = landingPoint(e);
             if (goal == null) { f.phase = "NO_LANDING_SITE"; goal = pos.add(0, 4, 0); landing = false; }
-            else f.phase = "LANDING";
+            else f.phase = emergency ? "MISSILE_LANDING" : "LANDING";
+        } else if (emergencyBreak) {
+            Vec3 approach = missile.missile().entity().getDeltaMovement().multiply(1, 0, 1).normalize();
+            if (approach.lengthSqr() < 0.1) approach = pos.subtract(missile.origin()).multiply(1, 0, 1).normalize();
+            int side = e.getUUID().hashCode() % 2 == 0 ? 1 : -1;
+            goal = pos.add(-approach.z * side * 55, -12, approach.x * side * 55);
+            f.attackSince = -1; f.phase = "EVADE_BREAK";
         } else if (f.waypoint != null) {
             Vec3 horizontal = f.waypoint.subtract(pos).multiply(1, 0, 1);
             boolean near = horizontal.lengthSqr() < 64;
@@ -277,7 +289,7 @@ final class VehiclePilot {
             if (f.airEntry != null) { goal = f.airEntry; f.phase = "TEAM_AIR_APPROACH"; }
         }
         if (!landing && !incoming && rank > 0 && enemy != null && !f.phase.equals("TEAM_AIR_APPROACH")) goal = goal.add(0, Math.min(24, rank * 10), 0);
-        goal = airSpacing(vessel, f, goal, now, landing);
+        if (!emergency) goal = airSpacing(vessel, f, goal, now, landing);
         goal = MovementBounds.clamp(e, goal, 12 + motion.horizontalDistance() * 20);
         Vec3 predicted = pos.add(motion.multiply(25, 0, 25));
         if (!MovementBounds.contains(e, predicted, 8)) {
@@ -306,6 +318,7 @@ final class VehiclePilot {
         double speed = motion.dot(e.getLookAngle().multiply(1, 0, 1).normalize());
         float desiredPitch = (float) Mth.clamp(horizontal > 10 ? 18 - speed * 20 : -speed * 35, -18, 22);
         if (Math.abs(yawError) > 50 || obstructed || pos.y < ground + 6) desiredPitch = (float) Mth.clamp(-speed * 25, -12, 12);
+        if (emergencyBreak && !obstructed && pos.y > ground + 6) desiredPitch = 20;
         boolean aiming = f.phase.equals("ATTACK_PASS") && enemy != null && horizontal > 25 && !vessel.seats().get(0).rotateHead();
         if (aiming) {
             Vec3 origin = vessel.muzzle(bot), fire = vessel.direction(bot).normalize();
@@ -336,14 +349,16 @@ final class VehiclePilot {
         }
         f.aiming = aiming; f.aimYaw = desiredYaw; f.aimPitch = desiredPitch;
         double verticalGoal = Mth.clamp((desiredAltitude - pos.y) * 0.06, landing ? -0.16 : -0.2, 0.35);
+        if (emergencyBreak && pos.y > ground + 6) verticalGoal = -0.45;
         if (landing && pos.y - desiredAltitude < 3) verticalGoal = Math.max(-0.07, verticalGoal);
         double liftError = verticalGoal - motion.y;
         int keys = !vessel.engineStarted() && !landing || liftError > 0.025 ? 4 : liftError < -0.025 ? 32 : 0;
         double rollError = -vessel.roll() - rollRate * 5 - mouseX * 0.015;
+        if (emergencyBreak) rollError += e.getUUID().hashCode() % 2 == 0 ? 40 : -40;
         if (rollError > 2) keys |= 2; else if (rollError < -2) keys |= 1;
         boolean hover = landing || f.phase.equals("HOLD") || f.phase.equals("AIR_SEPARATION");
         if (!e.onGround() && vessel.hovering() != hover) keys |= 16;
-        if (incoming && now >= f.nextDecoy && vessel.decoys() > 0) { keys |= 64; f.nextDecoy = now + 40; }
+        if (incoming && now >= f.nextDecoy && vessel.decoys() > 0) { keys |= 64; f.nextDecoy = now + (emergencyBreak ? 8 : 40); }
         vessel.input(bot, keys, mouseX, mouseY);
         return landing && e.onGround();
     }

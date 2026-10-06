@@ -33,11 +33,12 @@ public final class SuperbWarfareAccess implements WarfareAccess {
     private final Map<String, Object> props = new HashMap<>();
     private final Map<String, Field> values = new HashMap<>();
     private final Map<String, Method> vehicleMethods = new HashMap<>(), seatMethods = new HashMap<>();
-    private final Field gunStack, boltState, boltNeeded;
+    private final Field gunStack, boltState, boltNeeded, fireModeKind, fireModeLabel;
     private final Method boolGet;
     private final Method vehicleEngine, vehicleSeats, footprintSize, footprintCenter;
     private final Class<?> missile;
-    private final Method missileTarget, changeAmmo, countAmmo;
+    private final Method missileTarget, missileRadius, changeAmmo, countAmmo;
+    private final net.minecraft.network.syncher.EntityDataAccessor<Boolean> missileTop;
 
     public SuperbWarfareAccess() throws ReflectiveOperationException {
         ordnance = new NativeOrdnance();
@@ -78,7 +79,9 @@ public final class SuperbWarfareAccess implements WarfareAccess {
         boolGet = Class.forName(ROOT + "data.gun.value.BooleanValue").getMethod("get");
         boltState = gunData.getField("bolt");
         boltNeeded = Class.forName(ROOT + "data.gun.subdata.Bolt").getField("needed");
-        modeName = Class.forName(ROOT + "data.gun.FireModeInfo").getField("mode").getType().getMethod("getTypeName");
+        Class<?> fireModeInfo = Class.forName(ROOT + "data.gun.FireModeInfo");
+        fireModeKind = fireModeInfo.getField("mode"); fireModeLabel = fireModeInfo.getField("name");
+        modeName = fireModeKind.getType().getMethod("getTypeName");
         projectileId = Class.forName(ROOT + "data.gun.ProjectileInfo").getMethod("getId");
         damageModifier = vehicle.getMethod("getDamageModifier");
         computeDamage = Class.forName(ROOT + "entity.vehicle.damage.DamageModifier").getMethod("compute", Entity.class, DamageSource.class, float.class);
@@ -102,6 +105,8 @@ public final class SuperbWarfareAccess implements WarfareAccess {
         vehicleEngine = computed.getMethod("getEngineType"); vehicleSeats = computed.getMethod("seats");
         missile = Class.forName(ROOT + "entity.projectile.MissileProjectile");
         missileTarget = missile.getMethod("getTargetUUID");
+        missileRadius = missile.getMethod("getExplosionRadius");
+        missileTop = (net.minecraft.network.syncher.EntityDataAccessor<Boolean>) Class.forName(ROOT + "entity.projectile.JavelinMissileEntity").getField("TOP").get(null);
     }
     private void bind(String name, Class<?>... types) throws NoSuchMethodException { vehicleMethods.put(name, vehicle.getMethod(name, types)); }
 
@@ -119,6 +124,19 @@ public final class SuperbWarfareAccess implements WarfareAccess {
     @Override public Vessel vessel(Entity entity) {
         if (!isVehicle(entity)) throw new IllegalArgumentException("Not an SBW vehicle");
         return new NativeVessel(entity);
+    }
+    @Override public List<Missile> missiles(Entity target) {
+        Entity root = target.getRootVehicle();
+        java.util.Set<String> ids = new java.util.HashSet<>();
+        ids.add(target.getStringUUID()); ids.add(root.getStringUUID());
+        root.getPassengers().forEach(e -> ids.add(e.getStringUUID()));
+        List<Missile> found = new ArrayList<>();
+        for (Entity e : target.level().getEntities(target, root.getBoundingBox().inflate(256), missile::isInstance)) {
+            if (!e.isAlive() || !ids.contains((String) call(missileTarget, e))) continue;
+            boolean top = BuiltInRegistries.ENTITY_TYPE.getKey(e.getType()).getPath().equals("javelin_missile") && e.getEntityData().get(missileTop);
+            found.add(new Missile(e, top, ((Number) call(missileRadius, e)).doubleValue()));
+        }
+        return found;
     }
 
     @Override public double vehicleDamage(Entity target, LivingEntity bot, Gun gun) {
@@ -194,14 +212,14 @@ public final class SuperbWarfareAccess implements WarfareAccess {
         @Override public void finishBolt() { call(resetStatus, data); flush(); }
         @Override public void bolt() { if ((boolean) call(shouldBolt, data)) { call(startBolt, data); call(save, data); } }
         @Override public void zoom(boolean zoom) { call(boolSet, value("zooming"), zoom); flush(); }
+        @Override public boolean zooming() { return (boolean) call(boolGet, value("zooming")); }
         @Override public void fireMode(boolean automatic, boolean topAttack) {
             List<?> modes = (List<?>) prop("AVAILABLE_FIRE_MODES");
             String desired = topAttack ? "Top" : automatic ? "Auto" : "Semi";
             for (int i = 0; i < modes.size(); i++) {
-                Object mode;
-                try { mode = modes.get(i).getClass().getField("mode").get(modes.get(i)); }
-                catch (ReflectiveOperationException e) { throw new IllegalStateException(e); }
-                if (desired.equalsIgnoreCase((String) call(modeName, mode))) {
+                Object mode = field(fireModeKind, modes.get(i));
+                String name = (String) field(fireModeLabel, modes.get(i));
+                if (desired.equalsIgnoreCase(name) || !topAttack && desired.equalsIgnoreCase((String) call(modeName, mode))) {
                     if ((int) call(intGet, value("selectedFireMode")) != i) {
                         call(intSet, value("selectedFireMode"), i); call(save, data);
                     }

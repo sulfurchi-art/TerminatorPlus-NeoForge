@@ -1,0 +1,20 @@
+{
+  "jar": "C:\\Users\\13703\\Documents\\Codex\\2026-10-04\\http-200-https-github-com-sulfurchi\\outputs\\TerminatorPlus-NeoForge-1.21.1-4.18.0-BETA.jar",
+  "zip": "C:\\Users\\13703\\Documents\\Codex\\2026-10-04\\http-200-https-github-com-sulfurchi\\outputs\\TerminatorPlus-NeoForge-4.18.0-内测包.zip",
+  "jar_bytes": 761198,
+  "jar_sha256": "2D3005E972027752B76A82E8459F903140262025EC8DC67D02466CB2FACC3C43",
+  "zip_sha256": "6A912A45D889D45671AFFF4819EB6EEA2714139972901738438389D25640466F",
+  "archive_files": 48,
+  "frozen_files": 114,
+  "compiled_classes": 178,
+  "native_and_minimum_class_bytes_match": true,
+  "native_pass": 91,
+  "native_fail": 0,
+  "native_failures": [],
+  "base_pass": 128,
+  "base_fail": 2,
+  "failures": [
+    "equipment border infantry retreats heals and navigates with an inward margin",
+    "teamdive same side native takeoffs spread before a common smash with near member first"
+  ]
+}

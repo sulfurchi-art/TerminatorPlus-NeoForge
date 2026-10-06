@@ -48,6 +48,7 @@ public class SkillSettings {
         abilities.put("vehicleweapons", true);
         abilities.put("drones", true);
         abilities.put("c4", true);
+        abilities.put("missiledefense", true); // native missile alerts, emergency flight and enclosed shelter
         abilities.put("helicopters", true);  // native helicopter pilot inputs
         abilities.put("totems", true);       // a new totem in the off hand as soon as one pops
         abilities.put("retaliate", true);    // fight back against whoever hit the bot

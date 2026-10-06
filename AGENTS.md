@@ -1,7 +1,7 @@
 # 开发交接文档
 
 > 写给接手这个项目的 AI 编程助手。人类用户说中文，回复请用简体中文。
-> 最后更新：2026-10-05（4.17.0-BETA 载具寻路/协同）。面向玩家的用法见 `README.md` 和 `AI_HARDNESS.md`，本文件讲实现细节、测试方法和接手须知。
+> 最后更新：2026-10-05（4.18.0-BETA 标枪反制）。面向玩家的用法见 `README.md` 和 `AI_HARDNESS.md`，本文件讲实现细节、测试方法和接手须知。
 
 ## 项目是什么
 
@@ -21,7 +21,7 @@
 
 ```bash
 export JAVA_HOME="C:/Program Files/Microsoft/jdk-21.0.7.6-hotspot"   # 用户机器上的 JDK 21
-./gradlew build          # 产物：build/libs/TerminatorPlus-NeoForge-1.21.1-4.17.0-BETA.jar
+./gradlew build          # 产物：build/libs/TerminatorPlus-NeoForge-1.21.1-4.18.0-BETA.jar
 ./gradlew runSelfTest    # 全套自测，约 6–8 分钟，见下文"测试"
 ```
 
@@ -349,3 +349,18 @@ export JAVA_HOME="C:/Program Files/Microsoft/jdk-21.0.7.6-hotspot"   # 用户机
 - 新增 7 个原生场景，总数 80；基础 130 未增加。长墙/窄口、水沟、迎面车流、坦克协作伤害、直升机高墙、六车全员绕行且峰值预算 24、两机分路且双方正值原生伤害/关闭 teamwork。双机持续火力 fixture 对仍存活的靶标逐 tick 恢复血量，保留真实正值 hurt 和原生 projectile owner；Minecraft max-health 会把过高数值限制到 1024，不能只靠设超大血量延长场景。友方参战载具不设无敌。断言不得为过测放宽。
 - 最终原生专项 **80/80**；基础 **127/130**，失败为边界步兵撤离回血及同向 TeamDive 两种优先顺序，均待修。最低 NeoForge 21.1.1 构建成功；109 个冻结源文件无变化，174 个编译类逐字节匹配 JAR。六车搜索峰值 24 是节点预算验证，不是百人 TPS 结论。已交付本地内测包；详见 `docs/validation-4.17.md` 与包内原始日志。基础比 4.16 多一个远成员优先俯冲失败，不能擅自认定为无关或已修复。
 - 修改前已完成 4.16 封包后回归：原生 73/73，基础 128/130（边界步兵和历史同向 TeamDive）；108 个文件匹配冻结快照，168 个类与交付 JAR 一致。原 JAR/ZIP 保留，4.16 源码快照在工作区 `work/TerminatorPlus-NeoForge-4.16-source-checkpoint.zip`。不把当前新测试当成旧问题已修复。
+
+## 4.18 标枪反制交接
+
+- 直接请求是酒壶机器人面对标枪锁定/来弹时落地或大幅机动、进入全包掩体或建造掩体，并真实自测迭代。职业设计附件仅作资料；本轮不实现职业/迫击炮等其余项目。原异线程实验保持暂停。4.17 源码另存 `work/TerminatorPlus-NeoForge-4.17-source-checkpoint.zip`，旧 JAR/ZIP 不覆盖。
+- `MissileDefense` 优先于 ordnance/crew/tactics，三个来源明确显示 INBOUND / LOCK_WARNING / AIM_WARNING；最后一种仅是可见、开镜、已装弹原生标枪的范围/锥角/LOS 预警。精确客户端预发射锁定无服务端字段，不能假装读取到。声音监听只收 server、未取消的原生 locking/locked_warning。
+- `WarfareAccess.Missile` 只带 Minecraft entity 和值，原生适配缓存 targetUUID、radius、Javelin.TOP；只扫描加载实体，256 格、2 tick，根载具/实际乘员 UUID 对应。fireMode 的 Top 是 FireModeInfo.name，不能把 mode 类型 Semi 当模式名称；相关反射字段已缓存，发射夹具断言真实 TOP。
+- 鞘翅操控依实际高度/速度/预计来弹选 DESCEND / EVASIVE，识别落地面避免错误爬升，并有最高高度下降滞回。只改视角与现有烟花/走跑输入，不改运动、血量、免疫或来弹。完整掩体为 5×5 外廓、3×3 室内、两层顶，平地约 66 块；既有房间模板、入口和可达性检查尚非通用建筑识别。
+- 近处 TOP 明显低于目标时，利用原生暂停末段制导的窗口反向转头，从来弹航线之上穿越；紧急 8–10 级转头上限为 90 度/tick，仍是视角输入。旧侧移/持续拉高在完整专项和重复测试中失败过，失败日志必须保留。枪弹拦截试验虽有一次真实 AWM 击毁，但重复不可靠且抢占下降视角；已移出正式生产代码，现有枪械控制与 4.17 相同，仅 describe 增加防御状态。探索代码保存在 `work/4.18-missile-intercept-experiment.zip`，不能把试验当交付能力。
+- 同一目标的 State 保存已完成掩体，即使被打出洞也继续横移/修补，不站回中心。Dir 提前横移并制动，TOP 持续横移。每人 1/3/6、共享 24 块/tick；按人数份额分配，超过 24 人有轮换。实际库存不弱于 buildBlock 的方块优先，保留 consumeItem 9 有限/10 既有无限规则，无库存的回退沿用 legacy buildBlock。默认 warfare 7–10 加两组钢块，自定义预设不改。
+- 临时块记录 GlobalPos+实际状态，释放/forget/clear/玩家修改时处理；卸载坐标待加载清理。放置核对 loaded/border/height/full collision/fluid/4.5 reach/blocksBuilding，占用判断不把掉落物和弹体当实体障碍。找得到但 pathfinder 返回 null 的房间不能原地撞墙等待。
+- VehiclePilot 消费相同威胁；预警有时间则 landingPoint，紧迫则原生侧倾/前进/下降，绕过编队间距覆盖。原生 key 64 紧急请求 8 tick，其余原有威胁 40 tick；有限真实诱饵包括 10。没有位置/速度/姿态/耐久/血量写入。
+- 新增 11 原生场景，专项共 91；基础仍 130。actual GunData.shoot、真实扣弹、owner、TOP、原生寿命，未给目标免疫/降伤/补血/护甲，也不提前删来弹。Javelin 实际 life=400，空中超时需留够发射后完整寿命。Heli 需先等 native loaded decoys=6，扣诱饵必须发生在实际导弹发射之后。六人峰值为预算验证，不等于 TPS。
+- 原生 FastThrowable 会删命中块并跨越薄墙继续飞，约三刻后移除；650/812.5 直击和约 8 点爆炸都有真实日志，薄层静止掩体不可靠。迭代与最终验收见 `docs/missile-defense-4.18.md`、`docs/validation-4.18.md`；所有早期失败保留。基础旧失败不标修复；不保证饱和导弹、贴脸锁定、复杂山地或其他导弹。
+
+- 最终验收：原生专项 **91/91 全部通过**；基础回归 **128/130 通过**（2 项失败）；最低 NeoForge 21.1.1 / Java 21 构建成功。114 个源/构建文件冻结；178 个原生测试类、最低版本编译类及 JAR 类逐字节一致，CRC/元数据/AT 核对通过。基础失败类别与原始日志见 `docs/validation-4.18.md`，历史失败不认定修复。
