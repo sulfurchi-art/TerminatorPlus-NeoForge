@@ -69,6 +69,10 @@ public class TerminatorPlus {
         bus.addListener(this::onServerStopping);
         bus.addListener(this::onServerStopped);
         bus.addListener(this::onServerTick);
+        bus.addListener(this::onCombatDamage);
+        bus.addListener(net.neoforged.bus.api.EventPriority.LOWEST, this::onPlayerAttack);
+        bus.addListener(this::onCoverBroken);
+        bus.addListener(this::onCoverPlaced);
         bus.addListener(this::onRegisterCommands);
         bus.addListener(this::onPermissionNodes);
         bus.addListener(this::onPlayerLoggedIn);
@@ -129,8 +133,38 @@ public class TerminatorPlus {
         }
 
         if (manager != null) {
+            try { ((net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent) manager.getAgent()).getSkills().saveLearning(); }
+            catch (java.io.IOException e) { LOGGER.error("Cannot save opponent learning", e); }
+            try { manager.saveSettings(); }
+            catch (IllegalStateException e) { LOGGER.error("Cannot save TerminatorPlus settings", e); }
             manager.reset();
         }
+    }
+
+    private void onCombatDamage(net.neoforged.neoforge.event.entity.living.LivingDamageEvent.Post event) {
+        if (manager == null || event.getNewDamage() <= 0 || !(event.getSource().getEntity() instanceof net.minecraft.world.entity.LivingEntity attacker)) return;
+        var skills = ((net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent) manager.getAgent()).getSkills();
+        skills.onTeamDamage(event.getEntity(), attacker);
+        if (attacker instanceof Bot bot) {
+            boolean arrow = event.getSource().getDirectEntity() instanceof net.minecraft.world.entity.projectile.AbstractArrow;
+            boolean smash = bot.getMainHandItem().is(net.minecraft.world.item.Items.MACE) && bot.canSmash();
+            skills.onConfirmedDamage(bot, event.getEntity(), arrow, smash);
+        }
+    }
+
+    private void onPlayerAttack(net.neoforged.neoforge.event.entity.player.AttackEntityEvent event) {
+        if (manager != null && !event.isCanceled() && event.getEntity() instanceof ServerPlayer player
+                && !(player instanceof Bot) && event.getTarget() instanceof net.minecraft.world.entity.LivingEntity target)
+            ((net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent) manager.getAgent()).getSkills().onPlayerAttack(player, target);
+    }
+
+    private void onCoverBroken(net.neoforged.neoforge.event.level.BlockEvent.BreakEvent event) {
+        if (manager != null && !event.isCanceled() && event.getLevel() instanceof net.minecraft.server.level.ServerLevel world)
+            ((net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent) manager.getAgent()).getSkills().invalidateCover(world, event.getPos());
+    }
+    private void onCoverPlaced(net.neoforged.neoforge.event.level.BlockEvent.EntityPlaceEvent event) {
+        if (manager != null && !event.isCanceled() && event.getLevel() instanceof net.minecraft.server.level.ServerLevel world)
+            ((net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent) manager.getAgent()).getSkills().invalidateCover(world, event.getPos());
     }
 
     private void onServerStopped(ServerStoppedEvent event) {

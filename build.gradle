@@ -44,9 +44,10 @@ neoForge {
         selfTest {
             server()
             programArgument '--nogui'
-            gameDirectory = project.file('run-selftest')
+            gameDirectory = project.file(providers.gradleProperty('selftestDir').getOrElse('run-selftest'))
             systemProperty 'terminatorplus.selftest', 'true'
             systemProperty 'terminatorplus.fetchSkins', 'false'
+            systemProperty 'terminatorplus.selftest.focus', providers.gradleProperty('selftestFocus').getOrElse('')
         }
 
         configureEach {
@@ -62,6 +63,13 @@ neoForge {
 }
 
 // Expands the ${} properties in src/main/templates (neoforge.mods.toml).
+// Optional local integration test dependencies; they are never bundled into the mod.
+if (providers.gradleProperty('warfareModsDir').isPresent()) {
+    dependencies {
+        runtimeOnly fileTree(dir: providers.gradleProperty('warfareModsDir').get(), include: ['*.jar'])
+    }
+}
+
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
     var replaceProperties = [
             minecraft_version      : minecraft_version,

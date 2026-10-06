@@ -4,6 +4,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 public enum EnumTargetGoal {
+    NEAREST_ENEMY("Locate the nearest enemy human or bot, excluding vanilla teammates."),
     NEAREST_VULNERABLE_PLAYER("Locate the nearest real player that is in either Survival or Adventure mode."),
     NEAREST_PLAYER("Locate the nearest real online player, despite the gamemode."),
     NEAREST_HOSTILE("Locate the nearest hostile entity."),
@@ -19,6 +20,7 @@ public enum EnumTargetGoal {
     private static final Map<String, EnumTargetGoal> VALUES = new HashMap<>() {
         {
             this.put("none", NONE);
+            this.put("nearestenemy", NEAREST_ENEMY);
             this.put("nearestvulnerableplayer", NEAREST_VULNERABLE_PLAYER);
             this.put("nearestplayer", NEAREST_PLAYER);
             this.put("nearesthostile", NEAREST_HOSTILE);

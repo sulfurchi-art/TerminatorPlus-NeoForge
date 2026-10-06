@@ -36,6 +36,7 @@ final class SkillUtil {
      * Nothing to collide with (air, plants, water...), and not something that hurts.
      */
     static boolean passable(ServerLevel level, BlockPos pos) {
+        if (!MovementBounds.contains(level, Vec3.atBottomCenterOf(pos), 2)) return false;
         BlockState state = level.getBlockState(pos);
         return state.getCollisionShape(level, pos).isEmpty() && !state.is(Blocks.LAVA) && !state.is(BlockTags.FIRE)
                 && !state.is(Blocks.COBWEB) && !state.is(Blocks.SWEET_BERRY_BUSH) && !state.is(Blocks.POWDER_SNOW);

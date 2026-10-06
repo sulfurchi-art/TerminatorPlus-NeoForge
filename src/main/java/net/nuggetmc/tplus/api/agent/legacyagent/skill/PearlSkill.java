@@ -24,7 +24,7 @@ class PearlSkill {
     }
 
     private boolean ready(Terminator bot, BotMemory mem, long now) {
-        return skills.settings().pearls() && bot.countItem(Items.ENDER_PEARL) > 0 && now >= mem.nextPearl;
+        return skills.enabled(bot, "pearls") && bot.countItem(Items.ENDER_PEARL) > 0 && now >= mem.nextPearl;
     }
 
     /**
@@ -32,7 +32,8 @@ class PearlSkill {
      * bots that have both throw a pearl first when it's ready.
      */
     boolean tryGapClose(Terminator bot, BotMemory mem, LivingEntity target, long now) {
-        if (!ready(bot, mem, now) || bot.getBotHealth() < 10) return false;
+        if (!ready(bot, mem, now) || bot.getBotHealth() < 10 || bot instanceof net.nuggetmc.tplus.bot.Bot b
+                && (skills.warfare().reloadCommitted(b) || skills.warfare().canEngage(b, target))) return false;
 
         double horizontal = SkillUtil.horizontalDistance(bot.getLocation(), target.position());
         if (horizontal < MIN_GAP || horizontal > MAX_GAP) return false;
@@ -84,7 +85,7 @@ class PearlSkill {
         return targetPos.add(back.normalize().scale(2.5));
     }
 
-    private boolean throwTowards(Terminator bot, BotMemory mem, Vec3 goal, double tolerance, long now) {
+    boolean throwTowards(Terminator bot, BotMemory mem, Vec3 goal, double tolerance, long now) {
         mem.nextPearl = now + 40;
 
         PearlAim.Solution solution = PearlAim.solve(bot.getBotLevel(), bot.getEntity(), goal, tolerance);

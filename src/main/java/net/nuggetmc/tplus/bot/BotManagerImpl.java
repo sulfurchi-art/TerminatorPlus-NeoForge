@@ -17,6 +17,7 @@ import net.neoforged.neoforge.event.entity.living.LivingChangeTargetEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.nuggetmc.tplus.api.BotManager;
+import net.nuggetmc.tplus.TerminatorPlus;
 import net.nuggetmc.tplus.api.Terminator;
 import net.nuggetmc.tplus.api.agent.Agent;
 import net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent;
@@ -47,6 +48,9 @@ public class BotManagerImpl implements BotManager {
     private final Agent agent;
     private final Set<Terminator> bots;
     private final NumberFormat numberFormat;
+    private final EquipmentPresets presets;
+    private final BotSettingsStore settingsStore;
+    public EquipmentPresets presets() { return presets; }
 
     public boolean joinMessages = false;
     private boolean mobTarget = false;
@@ -58,6 +62,21 @@ public class BotManagerImpl implements BotManager {
         this.bots = ConcurrentHashMap.newKeySet(); //should fix concurrentmodificationexception
         this.numberFormat = NumberFormat.getInstance(Locale.US);
         this.agent = new LegacyAgent(this);
+        this.presets = new EquipmentPresets(server);
+        this.settingsStore = new BotSettingsStore(this);
+        try { settingsStore.load(); }
+        catch (java.io.IOException | IllegalArgumentException e) { LOGGER.error("Cannot load TerminatorPlus settings; using defaults", e); }
+    }
+
+    public void saveSettings() {
+        try { settingsStore.save(); }
+        catch (java.io.IOException e) { throw new IllegalStateException("无法保存机器人设置", e); }
+    }
+
+    public void reloadSettings() throws java.io.IOException {
+        settingsStore.load();
+        presets.reload();
+        ((LegacyAgent) agent).getSkills().chatter().reload();
     }
 
     @Override
@@ -77,11 +96,39 @@ public class BotManagerImpl implements BotManager {
 
     @Override
     public void add(Terminator bot) {
+        add(bot, true);
+    }
+
+    public void add(Terminator bot, boolean defaults) {
         if (joinMessages) {
             server.getPlayerList().broadcastSystemMessage(Component.literal(bot.getBotName() + " joined the game").withStyle(ChatFormatting.YELLOW), false);
         }
 
         bots.add(bot);
+        if (defaults && bot instanceof Bot b) {
+            if (presets.selected() != null) presets.selected().apply(b);
+            else if (((LegacyAgent) agent).getSkillSettings().defaultEquipment) DefaultEquipment.apply(b, b.hardness().level(), ((LegacyAgent) agent).getSkillSettings().defaultGear);
+            b.setHardnessOverride(b.getHardnessOverride());
+        }
+    }
+
+    public void createConfiguredBots(CommandSourceStack sender, String name, @Nullable String skin, Location location,
+                                     EquipmentPresets.Preset preset, int hardness, @Nullable String team) {
+        var scoreboard = server.getScoreboard();
+        var selectedTeam = team == null || team.equalsIgnoreCase("none") ? null : scoreboard.getPlayerTeam(team);
+        if (team != null && !team.equalsIgnoreCase("none") && selectedTeam == null) throw new IllegalArgumentException("找不到原版队伍：" + team);
+        String skinName = skin == null && preset.profile().contains("Skin") ? preset.profile().getString("Skin") : skin == null ? name : skin;
+        CompletableFuture.supplyAsync(() -> MojangAPI.getSkin(skinName), Util.ioPool())
+                .thenAcceptAsync(data -> {
+                    if (!server.isRunning() || TerminatorPlus.getManager() != this) return;
+                    if (team == null) preset.validateTeam(server);
+                    if (selectedTeam != null && scoreboard.getPlayerTeam(team) != selectedTeam) throw new IllegalArgumentException("队伍在生成前已被移除：" + team);
+                    Bot bot = Bot.createBot(location, name, data, false);
+                    preset.apply(bot, team == null);
+                    bot.setHardnessOverride(hardness);
+                    if (selectedTeam != null && scoreboard.getPlayerTeam(team) == selectedTeam) scoreboard.addPlayerToTeam(bot.getScoreboardName(), selectedTeam);
+                    ChatUtils.send(sender, "已生成机器人 " + name + "，AI hardness=" + hardness + "。");
+                }, server).exceptionally(error -> { LOGGER.error("Failed to create configured bot", error); server.execute(() -> ChatUtils.send(sender, "机器人生成失败：" + error.getCause().getMessage())); return null; });
     }
 
     @Nullable
@@ -169,11 +216,24 @@ public class BotManagerImpl implements BotManager {
         }
 
         int count = n;
+        EquipmentPresets.Preset equipment = presets.selected();
+        int hardness = ((LegacyAgent) agent).getSkillSettings().hardness;
+        boolean defaultEquipment = ((LegacyAgent) agent).getSkillSettings().defaultEquipment;
+        String defaultGear = ((LegacyAgent) agent).getSkillSettings().defaultGear;
+        String requestedSkin = skinName == null && equipment != null && equipment.profile().contains("Skin") ? equipment.profile().getString("Skin") : skin;
 
         // The skin lookup talks to the Mojang API: do it off the server thread, then spawn the bots on it.
-        CompletableFuture.supplyAsync(() -> MojangAPI.getSkin(skin), Util.ioPool())
+        CompletableFuture.supplyAsync(() -> MojangAPI.getSkin(requestedSkin), Util.ioPool())
                 .thenAcceptAsync(skinData -> {
-                    createBots(spawn, name, skinData, count, network);
+                    if (!server.isRunning() || TerminatorPlus.getManager() != this) return;
+                    if (equipment != null) equipment.validateTeam(server);
+                    Set<Terminator> created = createBots(spawn, name, skinData, Collections.nCopies(count, network), false);
+                    for (Terminator terminator : created) {
+                        Bot bot = (Bot) terminator;
+                        bot.setHardnessOverride(hardness);
+                        if (equipment != null) equipment.apply(bot);
+                        else if (defaultEquipment) DefaultEquipment.apply(bot, hardness, defaultGear);
+                    }
 
                     if (sender != null)
                         ChatUtils.send(sender, "Process completed (" + ChatFormatting.RED + ((System.currentTimeMillis() - timestamp) / 1000D) + "s" + ChatFormatting.RESET + ").");
@@ -198,6 +258,10 @@ public class BotManagerImpl implements BotManager {
 
     @Override
     public Set<Terminator> createBots(Location loc, String name, @Nullable String[] skin, List<NeuralNetwork> networks) {
+        return createBots(loc, name, skin, networks, true);
+    }
+
+    private Set<Terminator> createBots(Location loc, String name, @Nullable String[] skin, List<NeuralNetwork> networks, boolean defaults) {
         Set<Terminator> bots = new HashSet<>();
         ServerLevel world = loc.level();
 
@@ -207,7 +271,7 @@ public class BotManagerImpl implements BotManager {
         double f = n < 100 ? .004 * n : .4;
 
         for (NeuralNetwork network : networks) {
-            Bot bot = Bot.createBot(loc, name.replace("%", String.valueOf(i)), skin);
+            Bot bot = Bot.createBot(loc, name.replace("%", String.valueOf(i)), skin, defaults);
 
             if (network != null) {
                 bot.setNeuralNetwork(network == NeuralNetwork.RANDOM ? NeuralNetwork.generateRandomNetwork() : network);

@@ -38,3 +38,11 @@ file="META-INF/accesstransformer.cfg"
     versionRange="${minecraft_version_range}"
     ordering="NONE"
     side="BOTH"
+
+# Check compatibility at runtime so unsupported SBW versions do not prevent vanilla AI from loading.
+[[dependencies.${mod_id}]]
+    modId="superbwarfare"
+    type="optional"
+    versionRange="[0,)"
+    ordering="AFTER"
+    side="SERVER"

@@ -21,7 +21,8 @@ import javax.annotation.Nullable;
  */
 public final class PearlAim {
 
-    public record Solution(float yaw, float pitch, Vec3 landing, double error) {
+    public record Solution(float yaw, float pitch, Vec3 landing, double error, int ticks) {
+        public Solution(float yaw, float pitch, Vec3 landing, double error) { this(yaw, pitch, landing, error, 0); }
     }
 
     private static final double SPEED = 1.5;
@@ -87,7 +88,7 @@ public final class PearlAim {
 
                 // The owner is teleported to where the pearl was at the start of the tick it hit something.
                 double error = Math.sqrt(Mth.square(pos.x - goal.x) + Mth.square(pos.z - goal.z)) + Math.abs(pos.y - goal.y) * 0.5;
-                return new Solution(yaw, pitch, pos, error);
+                return new Solution(yaw, pitch, pos, error, tick + 1);
             }
 
             pos = next;
@@ -103,6 +104,7 @@ public final class PearlAim {
     }
 
     public static boolean isSafeLanding(ServerLevel level, BlockPos ground) {
+        if (!MovementBounds.contains(level, Vec3.atBottomCenterOf(ground.above()), 2)) return false;
         BlockState state = level.getBlockState(ground);
 
         if (state.is(Blocks.LAVA) || state.is(Blocks.MAGMA_BLOCK) || state.is(Blocks.CACTUS) || state.is(BlockTags.FIRE)

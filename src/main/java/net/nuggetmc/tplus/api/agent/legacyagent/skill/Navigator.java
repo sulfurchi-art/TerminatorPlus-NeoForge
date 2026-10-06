@@ -50,10 +50,10 @@ class Navigator {
         Vec3 pos = bot.getLocation();
         Vec3 targetPos = target.position();
 
-        trackProgress(bot, mem, targetPos, now);
+        trackProgress(bot, mem, target, now);
 
         // ladders, vines, scaffolding: climb when the target is above
-        if (skills.settings().climbing() && bot.isClimbing() && targetPos.y > pos.y + 0.5) {
+        if (skills.enabled(bot, "climbing") && bot.isClimbing() && targetPos.y > pos.y + 0.5) {
             climbHere(bot, target);
             return true;
         }
@@ -75,9 +75,9 @@ class Navigator {
 
     // ---- progress ---------------------------------------------------------------------------------------------------
 
-    private void trackProgress(Terminator bot, BotMemory mem, Vec3 targetPos, long now) {
+    private void trackProgress(Terminator bot, BotMemory mem, LivingEntity target, long now) {
         Vec3 pos = bot.getLocation();
-        double distance = pos.distanceTo(targetPos);
+        double distance = pos.distanceTo(target.position());
 
         if (mem.progressPos == null) {
             mem.progressPos = pos;
@@ -86,7 +86,7 @@ class Navigator {
             return;
         }
 
-        boolean closer = distance < mem.progressDistance - 1.5 || distance < 3.5;
+        boolean closer = distance < mem.progressDistance - 1.5 || distance < 3.5 && bot.getEntity().hasLineOfSight(target);
 
         if (closer || pos.distanceTo(mem.progressPos) > 2.0) {
             mem.progressPos = pos;
@@ -135,7 +135,7 @@ class Navigator {
     // ---- detours ----------------------------------------------------------------------------------------------------
 
     private boolean startPath(Terminator bot, BotMemory mem, LivingEntity target, long now) {
-        if (!skills.settings().pathfinding() || now < mem.nextPathSearch) return false;
+        if (!skills.enabled(bot, "pathfinding") || now < mem.nextPathSearch) return false;
         mem.nextPathSearch = now + 40;
 
         List<BlockPos> path = skills.pathfinder().find(bot.getBotLevel(), bot.getEntity(), target.blockPosition(), PATH_RANGE);
@@ -232,7 +232,7 @@ class Navigator {
      * target is right above (out of a pit).
      */
     private boolean startTower(Terminator bot, BotMemory mem, LivingEntity target, long now) {
-        if (!skills.settings().climbing() || !bot.isBotOnGround() || bot.isBotInWater()) return false;
+        if (!skills.enabled(bot, "climbing") || !bot.isBotOnGround() || bot.isBotInWater()) return false;
 
         ServerLevel level = bot.getBotLevel();
         ServerPlayer entity = bot.getEntity();
@@ -339,7 +339,7 @@ class Navigator {
      * Walk to a ladder/vine column nearby when the target is higher up.
      */
     private boolean startLadder(Terminator bot, BotMemory mem, LivingEntity target, long now) {
-        if (!skills.settings().climbing() || target.getY() < bot.getLocation().y + 2) return false;
+        if (!skills.enabled(bot, "climbing") || target.getY() < bot.getLocation().y + 2) return false;
 
         ServerLevel level = bot.getBotLevel();
         BlockPos feet = bot.getEntity().blockPosition();

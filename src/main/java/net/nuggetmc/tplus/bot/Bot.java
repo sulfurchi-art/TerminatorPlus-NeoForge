@@ -1,5 +1,12 @@
 package net.nuggetmc.tplus.bot;
 
+import net.nuggetmc.tplus.api.agent.legacyagent.LegacyAgent;
+import net.nuggetmc.tplus.api.agent.legacyagent.skill.Hardness;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.item.alchemy.PotionContents;
+import net.minecraft.world.item.SwordItem;
+import net.minecraft.world.item.AxeItem;
 import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.properties.Property;
 import net.minecraft.core.BlockPos;
@@ -92,6 +99,7 @@ public class Bot extends ServerPlayer implements Terminator {
     private boolean shield;
     private boolean blocking;
     private boolean blockUse;
+    private int shieldSession;
     private Vec3 velocity;
     private Vec3 oldVelocity;
     private boolean removeOnDeath;
@@ -110,6 +118,102 @@ public class Bot extends ServerPlayer implements Terminator {
     private boolean gliding;
     private int glideTicks;
     private boolean elytraSwapped;
+    private int hardnessOverride;
+    private int consumableSlot = -1;
+    private int consumableTicks;
+    private ItemStack consumableHand = ItemStack.EMPTY;
+    private final Map<String, Boolean> profileAbilities = new HashMap<>();
+    private String personality;
+
+    public String personality() {
+        if (personality == null) personality = List.of("分析", "嘲讽", "冷血", "队长", "阴人").get(Math.floorMod(getUUID().hashCode(), 5));
+        return personality;
+    }
+    public void setPersonality(String name) {
+        if (!Set.of("分析", "嘲讽", "冷血", "队长", "阴人").contains(name)) throw new IllegalArgumentException("未知人设：" + name);
+        personality = name;
+    }
+    public Map<String, Boolean> profileAbilities() { return profileAbilities; }
+
+    public int getHardnessOverride() { return hardnessOverride; }
+    public void setHardnessOverride(int value) {
+        if (value < 0 || value > 10) throw new IllegalArgumentException("AI hardness must be 1..10, or 0 to inherit");
+        hardnessOverride = value;
+        getAbilities().instabuild = hardness().infiniteSupplies();
+    }
+    public Hardness hardness() {
+        return ((LegacyAgent) agent).getSkills().hardness(this);
+    }
+
+    public boolean isConsuming() { return consumableSlot >= 0; }
+
+    public boolean hasRecoveryItem() {
+        return findSlot(this::usefulRecoveryItem) >= 0;
+    }
+
+    private boolean usefulRecoveryItem(ItemStack stack) {
+        if (net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem()).toString().equals("superbwarfare:medical_kit"))
+            return getHealth() < getMaxHealth() && !getCooldowns().isOnCooldown(stack.getItem()) && !hasEffect(MobEffects.REGENERATION);
+        if (stack.is(Items.CHORUS_FRUIT)) return false;
+        if (stack.is(Items.GOLDEN_APPLE) || stack.is(Items.ENCHANTED_GOLDEN_APPLE)) return !hasEffect(MobEffects.REGENERATION);
+        if (stack.getFoodProperties(this) != null) return getFoodData().needsFood();
+        if (stack.is(Items.POTION)) {
+            var contents = stack.getOrDefault(DataComponents.POTION_CONTENTS,
+                    PotionContents.EMPTY);
+            for (var effect : contents.getAllEffects()) {
+                if (effect.getEffect().is(MobEffects.HEAL)
+                        || effect.getEffect().is(MobEffects.REGENERATION)) return true;
+            }
+        }
+        return false;
+    }
+
+    /** Use the real stack for the vanilla duration and effects; never consume the display copy. */
+    public boolean beginRecoveryItem(boolean chorus) {
+        if (isConsuming()) return true;
+        int slot = !chorus ? findSlot(s -> s.is(Items.ENCHANTED_GOLDEN_APPLE) && usefulRecoveryItem(s)) : -1;
+        if (slot < 0 && !chorus) slot = findSlot(s -> s.is(Items.GOLDEN_APPLE) && usefulRecoveryItem(s));
+        if (slot < 0) slot = findSlot(s -> chorus ? s.is(Items.CHORUS_FRUIT) : usefulRecoveryItem(s));
+        if (slot < 0 || getCooldowns().isOnCooldown(getInventory().items.get(slot).getItem())) return false;
+        releaseWarfareHand();
+        lowerBow();
+        interruptShield();
+        consumableSlot = slot;
+        consumableHand = getInventory().items.get(HAND_SLOT);
+        getInventory().items.set(HAND_SLOT, getInventory().items.get(slot));
+        getInventory().items.set(slot, ItemStack.EMPTY);
+        startUsingItem(InteractionHand.MAIN_HAND);
+        consumableTicks = getMainHandItem().getUseDuration(this);
+        if (!isUsingItem() || consumableTicks <= 0) { cancelRecoveryItem(); return false; }
+        return true;
+    }
+
+    public void cancelRecoveryItem() {
+        if (!isConsuming()) return;
+        stopUsingItem();
+        getInventory().items.set(consumableSlot, getMainHandItem());
+        getInventory().items.set(HAND_SLOT, consumableHand);
+        consumableSlot = -1;
+        consumableHand = ItemStack.EMPTY;
+    }
+
+    private void tickRecoveryItem() {
+        if (!isConsuming()) return;
+        if (--consumableTicks > 0) return;
+        ItemStack result = getMainHandItem().finishUsingItem(level(), this);
+        getInventory().items.set(HAND_SLOT, result);
+        cancelRecoveryItem();
+    }
+
+    public void prepareEquipmentPreset() {
+        releaseWarfareHand();
+        cancelRecoveryItem();
+        lowerBow();
+        interruptShield();
+        stopGliding();
+        elytraSwapped = false;
+        if (rocket != null) { rocket.discard(); rocket = null; }
+    }
     @Nullable
     private FireworkRocketEntity rocket;
 
@@ -139,9 +243,14 @@ public class Bot extends ServerPlayer implements Terminator {
     }
 
     public static Bot createBot(Location loc, String name, @Nullable String[] skin) {
+        return createBot(loc, name, skin, true);
+    }
+
+    public static Bot createBot(Location loc, String name, @Nullable String[] skin, boolean defaults) {
         ServerLevel level = loc.level();
         MinecraftServer server = level.getServer();
         BotManagerImpl manager = TerminatorPlus.getManager();
+        if (defaults && manager.presets().selected() != null) manager.presets().selected().validateTeam(server);
 
         UUID uuid = BotUtils.randomSteveUUID();
 
@@ -172,7 +281,7 @@ public class Bot extends ServerPlayer implements Terminator {
             level.addFreshEntity(bot);
         }
 
-        manager.add(bot);
+        manager.add(bot, defaults);
 
         return bot;
     }
@@ -324,6 +433,16 @@ public class Bot extends ServerPlayer implements Terminator {
 
         updateLocation();
 
+        tickRecoveryItem();
+        getAbilities().instabuild = hardness().infiniteSupplies();
+        if (hardness().tactical() && blocking && isUsingItem()
+                && getUsedItemHand() == InteractionHand.OFF_HAND) updateUsingItem(getUseItem());
+        if (hardness().tactical()) {
+            getFoodData().addExhaustion((float) velocity.horizontalDistance() * 0.01F);
+            getFoodData().tick(this);
+            getCooldowns().tick();
+        }
+
         if (!isAlive()) return;
 
         if (elytraSwapped && !gliding && groundTicks > 1) {
@@ -341,7 +460,7 @@ public class Bot extends ServerPlayer implements Terminator {
             amount = maxHealth;
         }
 
-        setHealth(amount);
+        if (hardness().passiveRegeneration()) setHealth(amount);
 
         fallDamageCheck();
 
@@ -487,9 +606,15 @@ public class Bot extends ServerPlayer implements Terminator {
 
     @Override
     public void block(int blockLength, int cooldown) {
-        if (!shield || blockUse) return;
+        if (!shield || blockUse || isConsuming()) return;
+        if (hardness().tactical() && (!getOffhandItem().canPerformAction(net.neoforged.neoforge.common.ItemAbilities.SHIELD_BLOCK)
+                || getCooldowns().isOnCooldown(getOffhandItem().getItem()))) return;
+        lowerBow();
         startBlocking();
-        scheduler.runTaskLater(() -> stopBlocking(cooldown), blockLength);
+        int session = ++shieldSession;
+        scheduler.runTaskLater(() -> {
+            if (session == shieldSession) stopBlocking(cooldown, session);
+        }, blockLength);
     }
 
     private void startBlocking() {
@@ -498,11 +623,21 @@ public class Bot extends ServerPlayer implements Terminator {
         startUsingItem(InteractionHand.OFF_HAND);
     }
 
-    private void stopBlocking(int cooldown) {
+    private void stopBlocking(int cooldown, int session) {
         this.blocking = false;
-        stopUsingItem();
-        scheduler.runTaskLater(() -> this.blockUse = false, cooldown);
+        if (isUsingItem() && getUsedItemHand() == InteractionHand.OFF_HAND) stopUsingItem();
+        scheduler.runTaskLater(() -> { if (session == shieldSession) this.blockUse = false; }, cooldown);
     }
+
+    private void interruptShield() {
+        if (!blocking && !blockUse) return;
+        shieldSession++;
+        blocking = false;
+        blockUse = false;
+        if (isUsingItem() && getUsedItemHand() == InteractionHand.OFF_HAND) stopUsingItem();
+    }
+
+    public void lowerShield() { interruptShield(); }
 
     @Override
     public boolean isBotBlocking() {
@@ -516,7 +651,16 @@ public class Bot extends ServerPlayer implements Terminator {
         setItemOffhand(new ItemStack(enabled ? Items.SHIELD : Items.AIR));
     }
 
+    public void setShieldEnabled(boolean enabled) { shield = enabled; if (!enabled) interruptShield(); }
+
     private void updateLocation() {
+        if (isPassenger()) {
+            velocity = Vec3.ZERO;
+            fallDistance = 0;
+            groundTicks = 0;
+            updateChunkTracking();
+            return;
+        }
         velocity = MathUtils.clean(velocity); // TODO lag????
 
         if (gliding) {
@@ -752,7 +896,7 @@ public class Bot extends ServerPlayer implements Terminator {
 
         FireworkRocketEntity entity = new FireworkRocketEntity(level(), stack.copyWithCount(1), this);
         level().addFreshEntity(entity);
-        stack.shrink(1);
+        if (!hardness().infiniteSupplies()) stack.shrink(1);
         rocket = entity;
 
         setItem(new ItemStack(Items.FIREWORK_ROCKET));
@@ -783,7 +927,7 @@ public class Bot extends ServerPlayer implements Terminator {
         level().playSound(null, getX(), getY(), getZ(), SoundEvents.ENDER_PEARL_THROW, SoundSource.NEUTRAL, 0.5F,
                 0.4F / (random.nextFloat() * 0.4F + 0.8F));
 
-        stack.shrink(1);
+        if (!hardness().infiniteSupplies()) stack.shrink(1);
         return true;
     }
 
@@ -802,7 +946,7 @@ public class Bot extends ServerPlayer implements Terminator {
         level().playSound(null, getX(), getY(), getZ(), SoundEvents.WIND_CHARGE_THROW, SoundSource.NEUTRAL, 0.5F,
                 0.4F / (random.nextFloat() * 0.4F + 0.8F));
 
-        stack.shrink(1);
+        if (!hardness().infiniteSupplies()) stack.shrink(1);
         return true;
     }
 
@@ -818,6 +962,9 @@ public class Bot extends ServerPlayer implements Terminator {
 
     @Override
     public boolean smash(LivingEntity target) {
+        if (isConsuming() || isAlliedTo(target)) return false;
+        lowerBow();
+        interruptShield();
         Inventory inventory = getInventory();
         ItemStack hand = inventory.items.get(HAND_SLOT);
         int maceSlot = -1;
@@ -845,6 +992,7 @@ public class Bot extends ServerPlayer implements Terminator {
         boolean smashAttack = MaceItem.canSmashAttack(this);
 
         faceLocation(target.getBoundingBox().getCenter());
+        ((LegacyAgent) agent).getSkills().beginAttempt(this, target, net.nuggetmc.tplus.api.agent.legacyagent.skill.OpponentLearning.Move.MACE);
         attack(target);
         punch();
 
@@ -853,6 +1001,7 @@ public class Bot extends ServerPlayer implements Terminator {
             inventory.items.set(HAND_SLOT, inventory.items.get(maceSlot));
             inventory.items.set(maceSlot, used);
         } else {
+            defaultItem = inventory.items.get(HAND_SLOT);
             inventory.items.set(HAND_SLOT, hand);
         }
 
@@ -891,6 +1040,8 @@ public class Bot extends ServerPlayer implements Terminator {
 
     @Override
     public void drawBow() {
+        if (isConsuming()) return;
+        interruptShield();
         ItemStack bow = findItem(stack -> stack.getItem() instanceof BowItem);
         if (bow.isEmpty()) return;
 
@@ -910,6 +1061,8 @@ public class Bot extends ServerPlayer implements Terminator {
 
     @Override
     public boolean shootBow(float yaw, float pitch) {
+        if (isConsuming()) return false;
+        interruptShield();
         Inventory inventory = getInventory();
         int bowSlot = findSlot(stack -> stack.getItem() instanceof BowItem);
         if (bowSlot < 0) return false;
@@ -928,6 +1081,8 @@ public class Bot extends ServerPlayer implements Terminator {
         inventory.items.set(bowSlot, hand);
 
         // let go after a full draw (20 ticks): full power, critical arrow
+        var skills = ((LegacyAgent) agent).getSkills();
+        skills.beginAttempt(this, skills.currentTarget(this), net.nuggetmc.tplus.api.agent.legacyagent.skill.OpponentLearning.Move.BOW);
         bow.releaseUsing(level(), this, bow.getUseDuration(this) - 20);
 
         ItemStack used = inventory.items.get(HAND_SLOT);
@@ -939,6 +1094,7 @@ public class Bot extends ServerPlayer implements Terminator {
 
     @Override
     public boolean equipTotem() {
+        if (blocking) return false;
         Inventory inventory = getInventory();
         ItemStack offhand = inventory.offhand.get(0);
         if (offhand.is(Items.TOTEM_OF_UNDYING)) return false;
@@ -946,6 +1102,19 @@ public class Bot extends ServerPlayer implements Terminator {
         int slot = findSlot(stack -> stack.is(Items.TOTEM_OF_UNDYING));
         if (slot < 0) return false;
 
+        inventory.offhand.set(0, inventory.items.get(slot));
+        inventory.items.set(slot, offhand);
+        return true;
+    }
+
+    public boolean equipShield() {
+        if (isConsuming() || blocking) return false;
+        var action = net.neoforged.neoforge.common.ItemAbilities.SHIELD_BLOCK;
+        Inventory inventory = getInventory();
+        ItemStack offhand = inventory.offhand.get(0);
+        if (offhand.canPerformAction(action)) return true;
+        int slot = findSlot(stack -> stack.canPerformAction(action));
+        if (slot < 0) return false;
         inventory.offhand.set(0, inventory.items.get(slot));
         inventory.items.set(slot, offhand);
         return true;
@@ -985,7 +1154,7 @@ public class Bot extends ServerPlayer implements Terminator {
     public boolean consumeItem(Item item) {
         ItemStack stack = findItem(s -> s.is(item));
         if (stack.isEmpty()) return false;
-        stack.shrink(1);
+        if (!hardness().infiniteSupplies() || item == Items.TOTEM_OF_UNDYING) stack.shrink(1);
         return true;
     }
 
@@ -995,6 +1164,7 @@ public class Bot extends ServerPlayer implements Terminator {
         ItemStack remaining = stack.copy();
 
         for (int i = 1; i < items.size() && !remaining.isEmpty(); i++) {
+            if (i == consumableSlot) continue;
             ItemStack existing = items.get(i);
             if (!existing.isEmpty() && ItemStack.isSameItemSameComponents(existing, remaining) && existing.getCount() < existing.getMaxStackSize()) {
                 int move = Math.min(remaining.getCount(), existing.getMaxStackSize() - existing.getCount());
@@ -1004,6 +1174,7 @@ public class Bot extends ServerPlayer implements Terminator {
         }
 
         for (int i = 1; i < items.size() && !remaining.isEmpty(); i++) {
+            if (i == consumableSlot) continue;
             if (items.get(i).isEmpty()) {
                 items.set(i, remaining.split(Math.min(remaining.getCount(), remaining.getMaxStackSize())));
             }
@@ -1014,6 +1185,8 @@ public class Bot extends ServerPlayer implements Terminator {
 
     @Override
     public void clearInventory() {
+        releaseWarfareHand();
+        cancelRecoveryItem();
         NonNullList<ItemStack> items = getInventory().items;
 
         for (int i = 1; i < items.size(); i++) {
@@ -1073,6 +1246,12 @@ public class Bot extends ServerPlayer implements Terminator {
     }
 
     @Override
+    public void rideTick() {
+        super.rideTick();
+        updateChunkTracking();
+    }
+
+    @Override
     public boolean isBotInWater() {
         Vec3 loc = position();
 
@@ -1093,6 +1272,11 @@ public class Bot extends ServerPlayer implements Terminator {
     public void jump(Vec3 vel) {
         if (jumpTicks == 0 && groundTicks > 1) {
             jumpTicks = 4;
+            if (hardness().tactical()) {
+                double boost = hasEffect(MobEffects.JUMP)
+                        ? 0.1 * (getEffect(MobEffects.JUMP).getAmplifier() + 1) : 0;
+                vel = new Vec3(vel.x * potionSpeed(), vel.y + boost, vel.z * potionSpeed());
+            }
             velocity = vel;
         }
     }
@@ -1104,7 +1288,9 @@ public class Bot extends ServerPlayer implements Terminator {
 
     @Override
     public void walk(Vec3 vel) {
-        double max = 0.4;
+        double multiplier = hardness().tactical() ? potionSpeed() : 1;
+        double max = 0.4 * multiplier;
+        vel = new Vec3(vel.x * multiplier, vel.y, vel.z * multiplier);
 
         Vec3 sum = velocity.add(vel);
         if (sum.length() > max) sum = sum.normalize().scale(max);
@@ -1112,11 +1298,26 @@ public class Bot extends ServerPlayer implements Terminator {
         velocity = sum;
     }
 
+    /** Only the vanilla potion modifiers; difficulty itself never increases movement. */
+    private double potionSpeed() {
+        double speed = hasEffect(MobEffects.MOVEMENT_SPEED)
+                ? 0.2 * (getEffect(MobEffects.MOVEMENT_SPEED).getAmplifier() + 1) : 0;
+        double slow = hasEffect(MobEffects.MOVEMENT_SLOWDOWN)
+                ? 0.15 * (getEffect(MobEffects.MOVEMENT_SLOWDOWN).getAmplifier() + 1) : 0;
+        return Math.max(0, 1 + speed - slow);
+    }
+
     @Override
     public void attackTarget(Entity entity) {
+        if (isConsuming() || isAlliedTo(entity)) return;
         // any hit while falling with a mace becomes a smash attack, like for players
         if (entity instanceof LivingEntity living && canSmash()) {
             smash(living);
+            return;
+        }
+
+        if (hardness().tactical() && entity instanceof LivingEntity living) {
+            vanillaMelee(living);
             return;
         }
 
@@ -1130,9 +1331,48 @@ public class Bot extends ServerPlayer implements Terminator {
         }
     }
 
+    private void vanillaMelee(LivingEntity target) {
+        lowerBow();
+        interruptShield();
+        var skills = ((LegacyAgent) agent).getSkills();
+        ItemStack preferred = skills.meleeWeapon(this, target);
+        int slot = findSlot(s -> s == preferred);
+        ItemStack weapon = slot < 0 ? preferred.copy() : preferred;
+        ItemStack hand = getMainHandItem();
+        getInventory().items.set(HAND_SLOT, weapon);
+        if (slot >= 0) getInventory().items.set(slot, hand);
+        detectEquipmentUpdates();
+        boolean ready = getAttackStrengthScale(0.5F) >= 0.95F;
+        boolean criticals = ((LegacyAgent) agent).getSkills().enabled(this, "criticals");
+        boolean critWeapon = weapon.getItem() instanceof SwordItem || weapon.getItem() instanceof AxeItem;
+        boolean shieldBreak = hardness().level() == 10 && target.isBlocking() && weapon.getItem() instanceof AxeItem;
+        if (!shieldBreak && ready && criticals && critWeapon && isBotOnGround() && !isBotInWater() && !isClimbing()
+                && !hasEffect(MobEffects.BLINDNESS) && position().distanceTo(target.position()) < 2.8) {
+            jump();
+        } else if (ready && (shieldBreak || !criticals || !critWeapon || velocity.y <= 0 || isBotInWater() || isClimbing())) {
+            faceLocation(target.getBoundingBox().getCenter());
+            setSprinting(false);
+            skills.beginAttempt(this, target, shieldBreak ? net.nuggetmc.tplus.api.agent.legacyagent.skill.OpponentLearning.Move.SHIELD_BREAK
+                    : net.nuggetmc.tplus.api.agent.legacyagent.skill.OpponentLearning.Move.MELEE);
+            attack(target);
+            if (shieldBreak && !target.isBlocking()) skills.onShieldBreak(this, target);
+            punch();
+        }
+        ItemStack used = getInventory().items.get(HAND_SLOT);
+        getInventory().items.set(HAND_SLOT, hand);
+        if (slot >= 0) getInventory().items.set(slot, used);
+        else defaultItem = used;
+        detectEquipmentUpdates();
+    }
+
     @Override
     public void punch() {
         swing(InteractionHand.MAIN_HAND);
+    }
+
+    @Override
+    public void crit(Entity target) {
+        if (target instanceof LivingEntity living) ((LegacyAgent) agent).getSkills().onCriticalHit(this, living);
     }
 
     public boolean checkGround() {
@@ -1370,6 +1610,10 @@ public class Bot extends ServerPlayer implements Terminator {
 
         boolean damaged = super.hurt(damagesource, damage);
 
+        if (damaged && attacker instanceof LivingEntity living && attacker != this && !isAlliedTo(attacker)) {
+            ((LegacyAgent) agent).getSkills().onDamage(this, living);
+        }
+
         if (!damaged && blocking) {
             level().playSound(null, getX(), getY(), getZ(), SoundEvents.SHIELD_BLOCK, SoundSource.MASTER, 1, 1);
         }
@@ -1498,6 +1742,8 @@ public class Bot extends ServerPlayer implements Terminator {
      */
     @Override
     public void setItem(@Nullable ItemStack item, EquipmentSlot slot) {
+        if (slot == EquipmentSlot.MAINHAND && agent instanceof LegacyAgent legacy) legacy.getSkills().warfare().interrupt(this);
+        if (slot == EquipmentSlot.MAINHAND && isConsuming()) return;
         if (item == null) item = slot == EquipmentSlot.MAINHAND ? getWeapon() : defaultItem;
 
         Inventory inventory = getInventory();
@@ -1515,6 +1761,10 @@ public class Bot extends ServerPlayer implements Terminator {
         if (!ItemStack.matches(list.get(index), item)) {
             list.set(index, item.copy());
         }
+    }
+
+    private void releaseWarfareHand() {
+        if (agent instanceof LegacyAgent legacy) legacy.getSkills().warfare().release(this);
     }
 
     @Override

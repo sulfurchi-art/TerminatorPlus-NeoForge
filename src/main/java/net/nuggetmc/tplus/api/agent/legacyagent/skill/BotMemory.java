@@ -1,5 +1,9 @@
 package net.nuggetmc.tplus.api.agent.legacyagent.skill;
 
+import net.minecraft.core.GlobalPos;
+import net.minecraft.world.level.block.state.BlockState;
+import java.util.Map;
+import java.util.LinkedHashMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.Vec3;
 
@@ -10,6 +14,10 @@ import java.util.List;
  * Per-bot state of the skill layer. Times are server ticks.
  */
 public class BotMemory {
+    boolean gunEligible;
+    List<BlockPos> searchPath;
+    int searchPathIndex;
+    long nextSearchPath;
 
     public enum Flight {
         NONE,
@@ -25,7 +33,11 @@ public class BotMemory {
         /**
          * Climb above the target, stop gliding and smash down with a mace.
          */
-        MACE
+        MACE,
+        RECOVER,
+        HUNT,
+        FEINT,
+        INTERCEPT
     }
 
     // ---- progress / stuck detection ----
@@ -68,12 +80,27 @@ public class BotMemory {
     long lastRocket;
     long nextTakeoff;
     long nextFlyingHit;
+    long nextOffensiveFlight;
+    long nextEscapeFlight;
+    long groundFallbackUntil;
+    public FlightPlan getFlightPlan() { return plan; }
+    public long getNextOffensiveFlight() { return nextOffensiveFlight; }
+    public long getGroundFallbackUntil() { return groundFallbackUntil; }
 
     // ---- mace ----
     boolean maceDrop;
     int maceDropTicks;
     long nextWindCharge;
     long nextMaceAttempt;
+    int teamDiveTarget = -1;
+    int teamContactTicks = -1;
+    long teamImpactTick = -1;
+    long teamDiveReleased = -1;
+    long nextTeamDive;
+    long teamDiveWaitingSince = -1;
+    public long getTeamImpactTick() { return teamImpactTick; }
+    public long getTeamDiveReleased() { return teamDiveReleased; }
+    public int getTeamContactTicks() { return teamContactTicks; }
 
     // ---- ender pearls ----
     long nextPearl;
@@ -87,6 +114,92 @@ public class BotMemory {
     @Nullable
     Vec3 lastTargetPos;
     Vec3 targetVelocity = Vec3.ZERO;
+    @Nullable Vec3 lastSeen;
+    long lastSeenTick = -1000;
+    long recoverySearchUntil;
+    public enum Window { NONE, EATING, SHIELD, ATTACK_COOLDOWN, EQUIPMENT_SWAP, TAKEOFF, LANDING }
+    public enum Combo { NONE, AXE_SWORD, BOW_MACE, MACE_CRITICAL, PEARL_AMBUSH }
+    Window window = Window.NONE;
+    Combo combo = Combo.NONE;
+    long comboUntil;
+    int readTarget = -1;
+    boolean wasAirborne;
+    boolean wasGliding;
+    String previousHand = "";
+    String previousOffhand = "";
+    int enemyTotems;
+    int enemyApples;
+    long nextEliteDecision;
+    long nextSkillDecision;
+    @Nullable Vec3 eliteWaypoint;
+    long waypointUntil;
+    long feintUntil;
+    public enum Feint { NONE, RETREAT, CLIMB, DIVE, EXIT }
+    Feint feint = Feint.NONE;
+    long feintSince;
+    long nextFeint;
+    @Nullable Vec3 feintPoint;
+    int feintTarget = -1;
+    boolean comboConfirmed;
+    long comboStarted;
+    boolean allIn;
+    int interceptedPearl = -1;
+    @Nullable Vec3 pearlLanding;
+    @Nullable Vec3 interceptPoint;
+    long interceptUntil;
+    long nextPearlRead;
+    long enemyLandingUntil;
+    long defendingUntil;
+    long nextDefense;
+    int defendingThreat = -1;
+    public boolean isDefending() { return defendingUntil > 0; }
+    public Feint getFeint() { return feint; }
+    @Nullable public Vec3 getPearlLanding() { return pearlLanding; }
+    @Nullable public Vec3 getInterceptPoint() { return interceptPoint; }
+    public boolean isAllIn() { return allIn; }
+    @Nullable java.util.UUID pendingOpponent;
+    @Nullable OpponentLearning.Move pendingMove;
+    long pendingUntil;
+    boolean pendingHit;
+    int speechTarget = -1;
+    Window speechWindow = Window.NONE;
+    Tactic speechTactic = Tactic.FIGHT;
+    String speechTeam = "";
+    boolean speechDive;
+    long encounterSince;
+    int combatHits;
+    int combatSmashes;
+    public Window getWindow() { return window; }
+    public Combo getCombo() { return combo; }
+    public int getEnemyTotems() { return enemyTotems; }
+
+    public enum Tactic { FIGHT, RETREAT, RECOVER, HUNT, COVER_ALLY }
+    Tactic tactic = Tactic.FIGHT;
+    long tacticSince;
+    long nextRetreat;
+    long targetAcquired;
+    long nextMelee;
+    long lastDamage = -1000;
+    long pressureSince;
+    int pressureHits;
+    @Nullable Vec3 threat;
+    @Nullable Vec3 safePoint;
+    @Nullable Vec3 flightGoal;
+    @Nullable Vec3 protectedAlly;
+    public enum TeamRole { NONE, GUARD, BAIT, FLANK, ARCHER }
+    TeamRole teamRole = TeamRole.NONE;
+    int guardedAlly = -1;
+    int roleTarget = -1;
+    @Nullable Vec3 rolePoint;
+    long nextRolePoint;
+    public TeamRole getTeamRole() { return teamRole; }
+    public int getGuardedAlly() { return guardedAlly; }
+    long nextCover;
+    long coverExpires;
+    long nextBuff;
+    long nextChorus;
+    final Map<GlobalPos, BlockState> cover = new LinkedHashMap<>();
+    public Tactic getTactic() { return tactic; }
 
     @Nullable
     Vec3 lastGround;

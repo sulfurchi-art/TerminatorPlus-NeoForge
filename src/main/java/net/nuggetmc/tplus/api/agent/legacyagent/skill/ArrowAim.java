@@ -28,6 +28,36 @@ public final class ArrowAim {
     private ArrowAim() {
     }
 
+    /** Check the actual shot again before release; allies can enter the lane during the draw. */
+    public static boolean clearAllies(ServerLevel level, Entity shooter, LivingEntity target, Solution aim, Vec3 targetVelocity) {
+        return clearAlliesFrom(level, shooter, new Vec3(shooter.getX(), shooter.getEyeY() - 0.1, shooter.getZ()), target, aim, targetVelocity);
+    }
+
+    static boolean clearAlliesFrom(ServerLevel level, Entity shooter, Vec3 start, LivingEntity target, Solution aim, Vec3 targetVelocity) {
+        var allies = level.getEntitiesOfClass(LivingEntity.class, new net.minecraft.world.phys.AABB(start, start).inflate(64),
+                e -> e != shooter && e.isAlive() && shooter.isAlliedTo(e));
+        if (allies.isEmpty()) return true;
+        float yaw = aim.yaw() * Mth.DEG_TO_RAD, pitch = aim.pitch() * Mth.DEG_TO_RAD;
+        Vec3 velocity = new Vec3(-Mth.sin(yaw) * Mth.cos(pitch), -Mth.sin(pitch), Mth.cos(yaw) * Mth.cos(pitch)).scale(SPEED);
+        Vec3 position = start;
+        Vec3 motion = target.onGround() ? targetVelocity.multiply(1, 0, 1) : targetVelocity;
+        var destination = target.getBoundingBox().move(motion.scale(aim.ticks()));
+        for (int tick = 1; tick <= Math.min(MAX_TICKS, aim.ticks() + 1); tick++) {
+            Vec3 next = position.add(velocity);
+            var contact = destination.clip(position, next);
+            Vec3 end = contact.orElse(next);
+            for (LivingEntity ally : allies) {
+                Vec3 movement = ally instanceof net.nuggetmc.tplus.api.Terminator bot ? bot.getVelocity() : ally.getDeltaMovement();
+                var body = ally.getBoundingBox().inflate(0.4);
+                if (body.clip(position, end).isPresent()
+                        || body.move(movement.scale(Math.min(5, tick))).clip(position, end).isPresent()) return false;
+            }
+            if (contact.isPresent()) return true;
+            position = next; velocity = velocity.scale(0.99).subtract(0, 0.05, 0);
+        }
+        return true;
+    }
+
     /**
      * @param targetVelocity the target's movement per tick
      * @return the angles to shoot at, or {@code null} if the target is out of range or the flight path is blocked
@@ -35,6 +65,10 @@ public final class ArrowAim {
     @Nullable
     public static Solution solve(ServerLevel level, Entity shooter, LivingEntity target, Vec3 targetVelocity) {
         Vec3 start = new Vec3(shooter.getX(), shooter.getEyeY() - 0.1, shooter.getZ());
+        return solveFrom(level, shooter, start, target, targetVelocity);
+    }
+
+    @Nullable static Solution solveFrom(ServerLevel level, Entity shooter, Vec3 start, LivingEntity target, Vec3 targetVelocity) {
         Vec3 center = target.position().add(0, target.getBbHeight() * 0.5, 0);
         // jumping around on the ground isn't worth leading vertically
         Vec3 velocity = target.onGround() ? new Vec3(targetVelocity.x, 0, targetVelocity.z) : targetVelocity;

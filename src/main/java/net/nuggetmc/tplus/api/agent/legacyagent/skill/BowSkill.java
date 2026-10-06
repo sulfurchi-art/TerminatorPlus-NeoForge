@@ -24,7 +24,7 @@ class BowSkill {
     }
 
     boolean tryStart(Terminator bot, BotMemory mem, LivingEntity target, long now) {
-        if (!skills.settings().bow() || now < mem.nextArrow) return false;
+        if (!skills.enabled(bot, "bow") || now < mem.nextArrow) return false;
 
         double distance = bot.getLocation().distanceTo(target.position());
         if (distance < MIN_RANGE || distance > MAX_RANGE) return false;
@@ -32,7 +32,8 @@ class BowSkill {
         if (!bot.canShootBow()) return false;
 
         // no clear shot from here: keep walking and look again in a moment
-        if (ArrowAim.solve(bot.getBotLevel(), bot.getEntity(), target, mem.targetVelocity) == null) {
+        ArrowAim.Solution aim = ArrowAim.solve(bot.getBotLevel(), bot.getEntity(), target, mem.targetVelocity.scale(skills.hardness(bot).level() >= 7 ? 1 : 0));
+        if (aim == null || skills.enabled(bot, "teamwork") && !ArrowAim.clearAllies(bot.getBotLevel(), bot.getEntity(), target, aim, mem.targetVelocity)) {
             mem.nextArrow = now + 10;
             return false;
         }
@@ -55,7 +56,7 @@ class BowSkill {
             return false;
         }
 
-        ArrowAim.Solution aim = ArrowAim.solve(bot.getBotLevel(), bot.getEntity(), target, mem.targetVelocity);
+        ArrowAim.Solution aim = ArrowAim.solve(bot.getBotLevel(), bot.getEntity(), target, mem.targetVelocity.scale(skills.hardness(bot).level() >= 7 ? 1 : 0));
 
         if (aim != null) {
             bot.setLook(aim.yaw(), aim.pitch());
@@ -69,9 +70,12 @@ class BowSkill {
             return true;
         }
 
-        if (aim != null) {
-            bot.shootBow(aim.yaw(), aim.pitch());
+        if (aim != null && (!skills.enabled(bot, "teamwork") || ArrowAim.clearAllies(bot.getBotLevel(), bot.getEntity(), target, aim, mem.targetVelocity))) {
+            int level = skills.hardness(bot).level();
+            float error = level >= 7 ? 0 : (7 - level) * 1.2F;
+            bot.shootBow(aim.yaw() + (bot.getEntity().getRandom().nextFloat() - 0.5F) * error, aim.pitch());
         }
+        if (mem.combo == BotMemory.Combo.BOW_MACE) mem.comboUntil = now + 40;
 
         // up close the sword and the mace hit harder: leave them some time between arrows
         stop(bot, mem, now, bot.getLocation().distanceTo(target.position()) < 16 ? 50 : 12);
